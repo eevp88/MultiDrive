@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/card'
 import { PageHeader } from '@/components/drive/PageHeader'
 import { apiFetch, formatDate } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n/I18nProvider'
 
 type AuditLog = {
   id: string
@@ -26,6 +27,7 @@ type AuditLog = {
 }
 
 export function ActivityLogPage() {
+  const { t, tDynamic, translateError, language } = useI18n()
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -37,7 +39,7 @@ export function ActivityLogPage() {
       const data = await apiFetch<{ logs: AuditLog[] }>('/audit-logs')
       setLogs(data.logs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load activity logs')
+      setError(translateError(err, 'activity.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -53,41 +55,41 @@ export function ActivityLogPage() {
       return {
         bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
         icon: Plus,
-        label: action.replace(/_/g, ' ')
+        label: tDynamic(`audit.${action}`, action.replace(/_/g, ' '))
       }
     }
     if (act.includes('DELETE') || act.includes('PERMANENT') || act.includes('TRASH')) {
       return {
         bg: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
         icon: Trash2,
-        label: action.replace(/_/g, ' ')
+        label: tDynamic(`audit.${action}`, action.replace(/_/g, ' '))
       }
     }
     if (act.includes('RESTORE') || act.includes('SYNC')) {
       return {
         bg: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
         icon: RefreshCw,
-        label: action.replace(/_/g, ' ')
+        label: tDynamic(`audit.${action}`, action.replace(/_/g, ' '))
       }
     }
     if (act.includes('MOVE')) {
       return {
         bg: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
         icon: Move,
-        label: action.replace(/_/g, ' ')
+        label: tDynamic(`audit.${action}`, action.replace(/_/g, ' '))
       }
     }
     if (act.includes('DOWNLOAD')) {
       return {
         bg: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
         icon: Download,
-        label: action.replace(/_/g, ' ')
+        label: tDynamic(`audit.${action}`, action.replace(/_/g, ' '))
       }
     }
     return {
       bg: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
       icon: History,
-      label: action.replace(/_/g, ' ')
+      label: tDynamic(`audit.${action}`, action.replace(/_/g, ' '))
     }
   }
 
@@ -108,13 +110,13 @@ export function ActivityLogPage() {
 
     // Special metadata keys rendering
     const parts: string[] = []
-    if (parsed.name) parts.push(`Name: ${parsed.name}`)
-    if (parsed.fileName) parts.push(`File: ${parsed.fileName}`)
-    if (parsed.folderName) parts.push(`Folder: ${parsed.folderName}`)
-    if (parsed.count !== undefined) parts.push(`Count: ${parsed.count}`)
+    if (parsed.name) parts.push(t('activity.metaName', { value: parsed.name }))
+    if (parsed.fileName) parts.push(t('activity.metaFile', { value: parsed.fileName }))
+    if (parsed.folderName) parts.push(t('activity.metaFolder', { value: parsed.folderName }))
+    if (parsed.count !== undefined) parts.push(t('activity.metaCount', { value: parsed.count }))
     if (parsed.sizeBytes !== undefined) {
       const bytes = Number(parsed.sizeBytes)
-      parts.push(`Size: ${formatBytes(bytes)}`)
+      parts.push(t('activity.metaSize', { value: formatBytes(bytes) }))
     }
 
     if (parts.length > 0) {
@@ -135,8 +137,8 @@ export function ActivityLogPage() {
   return (
     <>
       <PageHeader
-        title="Activity Log"
-        description="View audit trails and file activities in your 9Drive workspace."
+        title={t('nav.activity')}
+        description={t('activity.description')}
       />
 
       {error && (
@@ -150,7 +152,7 @@ export function ActivityLogPage() {
         <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <History className="h-5 w-5 text-slate-500" />
-            Recent Activity Trail
+            {t('activity.recent')}
           </h2>
         </div>
 
@@ -158,13 +160,13 @@ export function ActivityLogPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-500">
               <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mb-2" />
-              <p className="text-sm">Loading activity logs...</p>
+              <p className="text-sm">{t('activity.loading')}</p>
             </div>
           ) : logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <History className="h-12 w-12 stroke-[1.5] mb-3 text-slate-300" />
-              <p className="font-semibold text-slate-600">No activity yet</p>
-              <p className="text-sm text-slate-400 mt-1">Actions you perform on your folders and files will appear here.</p>
+              <p className="font-semibold text-slate-600">{t('activity.empty')}</p>
+              <p className="text-sm text-slate-400 mt-1">{t('activity.emptyHint')}</p>
             </div>
           ) : (
             logs.map((log) => {
@@ -184,7 +186,7 @@ export function ActivityLogPage() {
                         </span>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">
                           <EntityIcon className="h-3.5 w-3.5" />
-                          <span>{log.entityType}</span>
+                          <span>{tDynamic(`enum.${log.entityType}`, log.entityType)}</span>
                         </div>
                       </div>
                       <div className="mt-2 flex flex-col gap-0.5">
@@ -195,7 +197,7 @@ export function ActivityLogPage() {
 
                   <div className="flex items-center gap-2 text-xs text-slate-400 self-end sm:self-center">
                     <Clock className="h-3.5 w-3.5" />
-                    <span>{formatDate(log.createdAt)}</span>
+                    <span>{formatDate(log.createdAt, language)}</span>
                   </div>
                 </div>
               )

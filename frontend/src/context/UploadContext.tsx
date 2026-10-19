@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { API_URL, apiFetch } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
+import { useI18n } from '@/i18n/I18nProvider'
 
 export type UploadProgressStatus = 'uploading' | 'done' | 'error' | 'partial'
 export type UploadProgressFile = { name: string; size: number; percent: number; status: UploadProgressStatus }
@@ -18,6 +19,7 @@ type UploadContextType = {
 const UploadContext = createContext<UploadContextType | undefined>(undefined)
 
 export function UploadProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n()
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState>({
     open: false,
     fileName: '',
@@ -103,7 +105,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     // Setup initial status
     setUploadProgress({
       open: true,
-      fileName: filesToUpload.length === 1 ? filesToUpload[0].name : `${filesToUpload.length} files`,
+      fileName: filesToUpload.length === 1 ? filesToUpload[0].name : t('upload.filesCount', { count: filesToUpload.length }),
       percent: 0,
       status: 'uploading',
       files: filesToUpload.map(f => ({ name: f.name, size: f.size, percent: 0, status: 'uploading' }))
