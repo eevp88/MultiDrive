@@ -13,6 +13,7 @@ type I18nValue = {
   language: Language
   setLanguage: (language: Language) => void
   t: (key: MessageKey, variables?: Variables) => string
+  tDynamic: (key: string, fallback?: string) => string
   translateError: (error: unknown, fallbackKey: MessageKey) => string
 }
 
@@ -42,6 +43,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return message.replace(/\{(\w+)\}/g, (match, name: string) => (name in variables ? String(variables[name]) : match))
   }, [language])
 
+  const tDynamic = useCallback((key: string, fallback?: string) => {
+    if (key in en) return dictionaries[language][key as MessageKey] ?? en[key as MessageKey]
+    return fallback ?? key
+  }, [language])
+
   const translateError = useCallback((error: unknown, fallbackKey: MessageKey) => {
     if (error instanceof ApiError && error.code) {
       const key = `error.${error.code}` as MessageKey
@@ -50,7 +56,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return error instanceof Error && error.message ? error.message : t(fallbackKey)
   }, [t])
 
-  const value = useMemo(() => ({ language, setLanguage, t, translateError }), [language, setLanguage, t, translateError])
+  const value = useMemo(() => ({ language, setLanguage, t, tDynamic, translateError }), [language, setLanguage, t, tDynamic, translateError])
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 

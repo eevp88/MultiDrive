@@ -3,7 +3,8 @@ import { RotateCcw, Trash2, ShieldAlert, FileText, CheckCircle2 } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { PageHeader } from '@/components/drive/PageHeader'
-import { apiFetch, formatBytes } from '@/lib/api'
+import { apiFetch, formatBytes, formatDate } from '@/lib/api'
+import { useI18n } from '@/i18n/I18nProvider'
 
 type TrashFile = {
   id: string
@@ -19,6 +20,7 @@ type TrashFile = {
 }
 
 export function TrashPage() {
+  const { t, translateError, language } = useI18n()
   const [files, setFiles] = useState<TrashFile[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -31,7 +33,7 @@ export function TrashPage() {
       const data = await apiFetch<{ files: TrashFile[] }>('/files/trash')
       setFiles(data.files)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to load trash')
+      setMessage(translateError(error, 'trash.loadFailed'))
       setMessageType('error')
     } finally {
       setLoading(false)
@@ -72,11 +74,11 @@ export function TrashPage() {
         ids.forEach((id) => next.delete(id))
         return next
       })
-      setMessage(`Successfully restored ${ids.length} file(s).`)
+      setMessage(t('trash.restored', { count: ids.length }))
       setMessageType('success')
       window.dispatchEvent(new Event('9drive:storage-changed'))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to restore files')
+      setMessage(translateError(error, 'trash.restoreFailed'))
       setMessageType('error')
     } finally {
       setLoading(false)
@@ -85,7 +87,7 @@ export function TrashPage() {
 
   async function handlePermanentDelete(ids: string[]) {
     if (ids.length === 0) return
-    if (!confirm(`Are you sure you want to permanently delete ${ids.length} file(s)? This action cannot be undone.`)) return
+    if (!confirm(t('trash.confirmPermanent', { count: ids.length }))) return
     setLoading(true)
     setMessage('')
     try {
@@ -99,11 +101,11 @@ export function TrashPage() {
         ids.forEach((id) => next.delete(id))
         return next
       })
-      setMessage(`Permanently deleted ${ids.length} file(s).`)
+      setMessage(t('trash.deleted', { count: ids.length }))
       setMessageType('success')
       window.dispatchEvent(new Event('9drive:storage-changed'))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Failed to permanently delete files')
+      setMessage(translateError(error, 'trash.deleteFailed'))
       setMessageType('error')
     } finally {
       setLoading(false)
@@ -113,16 +115,16 @@ export function TrashPage() {
   return (
     <>
       <PageHeader
-        title="Recycle Bin"
-        description="Manage deleted files. Restore them to active folders or delete them permanently."
+        title={t('nav.trash')}
+        description={t('trash.description')}
         actions={
           selectedIds.size > 0 ? (
             <>
               <Button variant="outline" onClick={() => handleRestore(Array.from(selectedIds))} disabled={loading}>
-                <RotateCcw className="h-4 w-4" /> Restore Selected ({selectedIds.size})
+                <RotateCcw className="h-4 w-4" /> {t('trash.restoreSelected', { count: selectedIds.size })}
               </Button>
               <Button variant="danger" onClick={() => handlePermanentDelete(Array.from(selectedIds))} disabled={loading}>
-                <Trash2 className="h-4 w-4" /> Delete Selected ({selectedIds.size})
+                <Trash2 className="h-4 w-4" /> {t('trash.deleteSelected', { count: selectedIds.size })}
               </Button>
             </>
           ) : null
@@ -144,8 +146,8 @@ export function TrashPage() {
         {files.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center">
             <Trash2 className="h-12 w-12 text-slate-400 mb-3" />
-            <p className="text-base font-bold">Trash is empty</p>
-            <p className="text-sm text-slate-500 mt-1">Deleted files will appear here.</p>
+            <p className="text-base font-bold">{t('trash.empty')}</p>
+            <p className="text-sm text-slate-500 mt-1">{t('trash.emptyHint')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -160,11 +162,11 @@ export function TrashPage() {
                       className="rounded border-slate-300"
                     />
                   </th>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Account</th>
-                  <th className="p-4">Size</th>
-                  <th className="p-4">Deleted At</th>
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="p-4">{t('table.name')}</th>
+                  <th className="p-4">{t('trash.account')}</th>
+                  <th className="p-4">{t('table.size')}</th>
+                  <th className="p-4">{t('trash.deletedAt')}</th>
+                  <th className="p-4 text-right">{t('trash.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,7 +193,7 @@ export function TrashPage() {
                     </td>
                     <td className="p-4 text-sm font-semibold">{formatBytes(file.sizeBytes)}</td>
                     <td className="p-4 text-sm text-slate-500">
-                      {new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(file.deletedAt))}
+                      {formatDate(file.deletedAt, language)}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -200,7 +202,7 @@ export function TrashPage() {
                           size="sm"
                           onClick={() => handleRestore([file.id])}
                           disabled={loading}
-                          title="Restore"
+                          title={t('trash.restore')}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </Button>
@@ -209,7 +211,7 @@ export function TrashPage() {
                           size="sm"
                           onClick={() => handlePermanentDelete([file.id])}
                           disabled={loading}
-                          title="Delete Permanently"
+                          title={t('trash.deletePermanently')}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
