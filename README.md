@@ -1,14 +1,10 @@
-![9Drive cover](https://i.ibb.co.com/35BySv1C/image.png)
+# MultiDrive
 
-# 9Drive
-
-9Drive is a storage gateway web app for connecting multiple Google Drive accounts into one virtual storage dashboard. Users can register with email/password or Google, automatically connect their first Google Drive account during Google sign-in, track quota, upload files into a dedicated `9drive` Drive folder, organize files with virtual folders, preview files, sync MySQL from Google Drive, and let the backend route uploads to the Drive account with enough free space.
+MultiDrive is a storage gateway web app for connecting multiple Google Drive accounts into one virtual storage dashboard. Users can register with email/password or Google, automatically connect their first Google Drive account during Google sign-in, track quota, upload files into a dedicated `9drive` Drive folder, organize files with virtual folders, preview files, sync MySQL from Google Drive, and let the backend route uploads to the Drive account with enough free space.
 
 ## License
 
-Copyright 2026 Zenhosta
-
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
 
 ## Features
 
@@ -35,18 +31,6 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 - MySQL database with Prisma migrations.
 - Express + TypeScript backend.
 - React + Vite frontend.
-
-## Preview
-
-Live preview: https://9drive.zenhosta.com
-
-![9Drive dashboard preview](https://i.ibb.co.com/HLjG3JRf/image.png)
-
-![9Drive shared file preview](https://i.ibb.co.com/QLpYGmx/image.png)
-
-## Star History
-
-[![Star History Chart](https://star-history.dera.page/svg?repos=zenhosta/9drive&type=Date)](https://star-history.dera.page/#zenhosta/9drive&type=Date)
 
 ## Project Structure
 
@@ -693,7 +677,7 @@ file
 Instead of seeding Google credentials manually using `npm run seed:google-config`, you can set them up directly from the frontend dashboard:
 1. Log in to the dashboard.
 2. Go to **Settings** -> **Google Credentials**.
-3. Input your **Google Client ID**, **Google Client Secret**, and **Redirect URI** (e.g. `https://103.65.237.136.nip.io:4000/connected-accounts/google/callback`).
+3. Input your **Google Client ID**, **Google Client Secret**, and **Redirect URI** (e.g. `https://your-domain.example:4000/connected-accounts/google/callback`).
 4. Click **Save Configuration**.
 
 The config is automatically encrypted and saved into the database, enabling Google sign-in and Google Drive connections instantly.
