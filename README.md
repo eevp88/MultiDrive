@@ -362,6 +362,25 @@ Frontend runs at:
 http://localhost:5173
 ```
 
+## Administrators
+
+Instance-wide settings (`/system/*`: Google OAuth credentials, system update, database backup/restore) are restricted to users with the `admin` role. Everyone else gets `403 ADMIN_REQUIRED`, and the Settings page hides those cards.
+
+New users are always created as regular users. Promote one from the server, after they have registered:
+
+```bash
+# Docker
+docker compose exec backend npm run make-admin -- user@example.com
+
+# Without Docker (from backend/)
+npm run make-admin -- user@example.com
+
+# Revoke admin access
+docker compose exec backend npm run make-admin -- user@example.com --revoke
+```
+
+The role is read from the database on every request, so revoking takes effect immediately.
+
 ## Docker Deployment
 
 This repository includes Docker files for running MySQL, backend, and frontend together.

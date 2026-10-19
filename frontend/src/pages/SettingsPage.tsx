@@ -32,6 +32,8 @@ export function SettingsPage() {
   const { t, translateError } = useI18n()
   const user = getStoredUser()
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([])
+  // Instance-wide controls (OAuth credentials, updates, backups) are backend-restricted to admins; this only hides them.
+  const [isAdmin, setIsAdmin] = useState(user?.role === 'admin')
   const [message, setMessage] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [s3Open, setS3Open] = useState(false)
@@ -245,6 +247,11 @@ export function SettingsPage() {
     const data = await apiFetch<{ accounts: ConnectedAccount[] }>('/connected-accounts')
     setAccounts(data.accounts)
 
+    const me = await apiFetch<{ user: { role?: string } }>('/auth/me').catch(() => null)
+    const admin = me?.user.role === 'admin'
+    setIsAdmin(admin)
+    if (!admin) return
+
     try {
       const configData = await apiFetch<{ exists: boolean; clientId: string; redirectUri: string; hasSecret: boolean; defaultRedirectUri: string }>('/system/google-config')
       if (configData.exists) {
@@ -419,6 +426,7 @@ export function SettingsPage() {
             </div>
           </Card>
 
+          {isAdmin ? <>
           <Card className="p-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
               <div className="flex items-center gap-2.5">
@@ -606,6 +614,7 @@ export function SettingsPage() {
               )}
             </div>
           </Card>
+          </> : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 lg:gap-3">
           <Card className="p-4"><HardDrive className="h-5 w-5 text-blue-600" /><h2 className="mt-2 text-[14px] font-bold">{t('settings.storageCard')}</h2><p className="mt-1 text-[12px] text-slate-500">{t('settings.connectedAccounts', { count: accounts.length })}</p></Card>
