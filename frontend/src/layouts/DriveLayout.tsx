@@ -33,16 +33,19 @@ import { useUpload } from '@/context/UploadContext'
 import { clearAuthSession, getStoredUser, updateStoredUser, type AuthUser } from '@/lib/auth'
 import { getGravatarUrl } from '@/lib/gravatar'
 import { cn } from '@/lib/utils'
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
+import { useI18n } from '@/i18n/I18nProvider'
+import type { MessageKey } from '@/i18n/en'
 
-const menu = [
-  { label: 'All Files', icon: FileArchive, href: '/all-files' },
-  { label: 'Quota Tracker', icon: Gauge, href: '/quota' },
-  { label: 'Shared With Me', icon: Share2, href: '/shared' },
-  { label: 'Starred', icon: Star, href: '/starred', disabled: true },
-  { label: 'Recycle Bin', icon: Trash2, href: '/trash' },
-  { label: 'Activity Log', icon: History, href: '/activity' },
-  { label: 'Setting', icon: Settings, href: '/settings' },
-  { label: 'API Keys', icon: Braces, href: '/api' },
+const menu: Array<{ labelKey: MessageKey; icon: typeof FileArchive; href: string; disabled?: boolean }> = [
+  { labelKey: 'nav.allFiles', icon: FileArchive, href: '/all-files' },
+  { labelKey: 'nav.quota', icon: Gauge, href: '/quota' },
+  { labelKey: 'nav.shared', icon: Share2, href: '/shared' },
+  { labelKey: 'nav.starred', icon: Star, href: '/starred', disabled: true },
+  { labelKey: 'nav.trash', icon: Trash2, href: '/trash' },
+  { labelKey: 'nav.activity', icon: History, href: '/activity' },
+  { labelKey: 'nav.settings', icon: Settings, href: '/settings' },
+  { labelKey: 'nav.apiKeys', icon: Braces, href: '/api' },
 ]
 
 type StorageSummary = {
@@ -58,23 +61,24 @@ type StorageBreakdown = {
 }
 
 function SystemInfoDropdown({ storage }: { storage: any }) {
+  const { t } = useI18n()
   const activeGoogle = storage?.accounts?.filter((a: any) => a.provider === 'google_drive' && a.status === 'connected') ?? []
 
   return (
     <div className="absolute right-0 top-12 z-50 w-[min(calc(100vw-2rem),22rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/15">
       <div className="border-b border-slate-200 px-4 py-3 bg-slate-50/50">
-        <p className="text-sm font-extrabold text-slate-950">Workspace Status & Info</p>
-        <p className="text-xs text-slate-500">Overview of your connections & guidelines</p>
+        <p className="text-sm font-extrabold text-slate-950">{t('info.title')}</p>
+        <p className="text-xs text-slate-500">{t('info.subtitle')}</p>
       </div>
       <div className="max-h-96 overflow-y-auto p-4 space-y-4">
         {/* Connection status */}
         <div>
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Connection Status</h4>
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> {t('info.connectionStatus')}</h4>
           <div className="mt-2 space-y-2">
             <div className="flex items-center justify-between text-xs rounded-xl bg-slate-50 p-2.5 border border-slate-100">
-              <span className="font-semibold text-slate-700">Google Drive accounts</span>
+              <span className="font-semibold text-slate-700">{t('info.googleAccounts')}</span>
               <span className={activeGoogle.length > 0 ? "text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-100" : "text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-100"}>
-                {activeGoogle.length} Connected
+                {t('info.connectedCount', { count: activeGoogle.length })}
               </span>
             </div>
             {activeGoogle.map((acc: any) => (
@@ -85,21 +89,21 @@ function SystemInfoDropdown({ storage }: { storage: any }) {
 
         {/* Database & engine status */}
         <div>
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><HardDrive className="h-3.5 w-3.5 text-blue-500" /> Storage Engine</h4>
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><HardDrive className="h-3.5 w-3.5 text-blue-500" /> {t('info.engine')}</h4>
           <div className="mt-2 text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-            <p>• <b>DB Type:</b> SQLite (Local Database)</p>
-            <p>• <b>Upload Folder:</b> Google Drive dedicated <code>9drive</code></p>
-            <p>• <b>Max Upload Size:</b> 5 GB per stream</p>
+            <p>• <b>{t('info.dbType')}</b> {t('info.dbValue')}</p>
+            <p>• <b>{t('info.uploadFolder')}</b> {t('info.uploadFolderValue')} <code>9drive</code></p>
+            <p>• <b>{t('info.maxUpload')}</b> {t('info.maxUploadValue')}</p>
           </div>
         </div>
 
         {/* Tips & Guides */}
         <div>
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><Info className="h-3.5 w-3.5 text-indigo-500" /> Usage Tips</h4>
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5"><Info className="h-3.5 w-3.5 text-indigo-500" /> {t('info.tips')}</h4>
           <ul className="mt-2 text-[11px] text-slate-500 list-disc list-inside space-y-1 pl-1">
-            <li>Virtual folders exist only in your SQLite database.</li>
-            <li>Physical files are always uploaded straight to Google Drive.</li>
-            <li>Use the Sync button to fetch changes made directly on Drive.</li>
+            <li>{t('info.tip1')}</li>
+            <li>{t('info.tip2')}</li>
+            <li>{t('info.tip3')}</li>
           </ul>
         </div>
       </div>
@@ -108,16 +112,17 @@ function SystemInfoDropdown({ storage }: { storage: any }) {
 }
 
 function Sidebar({ onNavigate, user, storage, breakdown, onLogout }: { onNavigate?: () => void; user: AuthUser | null; storage: StorageSummary | null; breakdown: StorageBreakdown; onLogout: () => void }) {
+  const { t } = useI18n()
   const used = Number(storage?.usedBytes ?? 0)
   const total = Number(storage?.totalBytes ?? 0)
   const progress = total > 0 ? Math.min(100, (used / total) * 100) : 0
   const [profileImageUrl, setProfileImageUrl] = useState('')
   const [avatarError, setAvatarError] = useState(false)
-  const items = [
-    ['Photo', formatBytes(breakdown.photo), 'bg-lime-500'],
-    ['Video', formatBytes(breakdown.video), 'bg-yellow-400'],
-    ['Document', formatBytes(breakdown.document), 'bg-cyan-400'],
-    ['Free Storage', formatBytes(storage?.availableBytes), 'bg-orange-500'],
+  const items: Array<[MessageKey, string, string]> = [
+    ['sidebar.photo', formatBytes(breakdown.photo), 'bg-lime-500'],
+    ['sidebar.video', formatBytes(breakdown.video), 'bg-yellow-400'],
+    ['sidebar.document', formatBytes(breakdown.document), 'bg-cyan-400'],
+    ['sidebar.free', formatBytes(storage?.availableBytes), 'bg-orange-500'],
   ]
 
   useEffect(() => {
@@ -140,50 +145,50 @@ function Sidebar({ onNavigate, user, storage, breakdown, onLogout }: { onNavigat
         ) : (
           <img
             src={profileImageUrl}
-            alt="User avatar"
+            alt={t('sidebar.avatarAlt')}
             className="h-8 w-8 rounded-full border border-slate-200 object-cover"
             onError={() => setAvatarError(true)}
           />
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold text-slate-900 leading-none">{user?.name ?? 'User'}</p>
-          <p className="truncate text-xs text-slate-500 mt-1">{user?.email ?? 'Loading...'}</p>
+          <p className="truncate text-[15px] font-bold text-slate-900 leading-none">{user?.name ?? t('sidebar.userFallback')}</p>
+          <p className="truncate text-xs text-slate-500 mt-1">{user?.email ?? t('sidebar.loading')}</p>
         </div>
         <MoreVertical className="h-4 w-4 text-slate-400" />
       </div>
 
       <nav className="grid gap-1">
         {menu.map((item) => item.disabled ? (
-          <button key={item.label} type="button" disabled className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-xl px-3.5 text-[13px] font-bold text-slate-400 opacity-60">
+          <button key={item.labelKey} type="button" disabled className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-xl px-3.5 text-[13px] font-bold text-slate-400 opacity-60">
             <item.icon className="h-4 w-4" />
-            {item.label}
+            {t(item.labelKey)}
           </button>
         ) : (
-          <NavLink key={item.label} to={item.href} onClick={onNavigate} className={({ isActive }) => cn('inline-flex h-10 items-center gap-2.5 rounded-xl px-3.5 text-[13px] font-bold transition-all border border-transparent', isActive ? 'bg-blue-600/10 text-blue-600 border-blue-600/10 shadow-sm' : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900')}>
+          <NavLink key={item.labelKey} to={item.href} onClick={onNavigate} className={({ isActive }) => cn('inline-flex h-10 items-center gap-2.5 rounded-xl px-3.5 text-[13px] font-bold transition-all border border-transparent', isActive ? 'bg-blue-600/10 text-blue-600 border-blue-600/10 shadow-sm' : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900')}>
             <item.icon className="h-4 w-4" />
-            {item.label}
+            {t(item.labelKey)}
           </NavLink>
         ))}
       </nav>
 
       <div className="mt-auto border-t border-slate-200/60 pt-4 text-[13px]">
         <div className="mb-3 space-y-1.5">
-          {items.map(([label, value, color]) => (
-            <div key={label} className="flex items-center justify-between text-slate-500 font-medium">
-              <span className="flex items-center gap-1.5"><span className={cn('h-1.5 w-1.5 rounded-full', color)} />{label}</span>
+          {items.map(([labelKey, value, color]) => (
+            <div key={labelKey} className="flex items-center justify-between text-slate-500 font-medium">
+              <span className="flex items-center gap-1.5"><span className={cn('h-1.5 w-1.5 rounded-full', color)} />{t(labelKey)}</span>
               <span className="font-semibold text-slate-700">{value}</span>
             </div>
           ))}
         </div>
         <div className="flex justify-between text-sm font-bold text-slate-700">
-          <span>{formatBytes(storage?.usedBytes)} used</span>
+          <span>{t('sidebar.used', { size: formatBytes(storage?.usedBytes) })}</span>
           <span className="text-slate-400">{formatBytes(storage?.totalBytes)}</span>
         </div>
         <div className="my-2 h-1.5 rounded-full bg-slate-200/60 overflow-hidden">
           <div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: `${progress}%` }} />
         </div>
         <Button variant="danger" size="sm" className="mt-3 w-full justify-start h-10 px-3 text-[13px] font-bold" onClick={onLogout}>
-          <LogOut className="h-4 w-4" />Log Out
+          <LogOut className="h-4 w-4" />{t('sidebar.logout')}
         </Button>
       </div>
     </aside>
@@ -205,6 +210,7 @@ export function useDriveLayoutActions() {
 }
 
 export function DriveLayout() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -258,7 +264,7 @@ export function DriveLayout() {
   }, [theme])
 
   function toggleTheme() {
-    setTheme((t) => (t === 'light' ? 'dark' : 'light'))
+    setTheme((current) => (current === 'light' ? 'dark' : 'light'))
   }
 
   async function loadSidebarStats() {
@@ -391,7 +397,7 @@ export function DriveLayout() {
         <div className={cn('fixed inset-0 z-40 bg-slate-950/40 transition-opacity lg:hidden', sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={() => setSidebarOpen(false)} />
         <div className={cn('fixed inset-y-0 left-0 z-50 transform bg-white shadow-2xl transition-transform duration-300 ease-out lg:hidden', sidebarOpen ? 'translate-x-0' : '-translate-x-full')}>
           <div className="absolute right-4 top-4 z-10">
-            <Button variant="outline" size="icon" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)}>
+            <Button variant="outline" size="icon" aria-label={t('header.closeSidebar')} onClick={() => setSidebarOpen(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -401,7 +407,7 @@ export function DriveLayout() {
           <header className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center justify-between gap-3 lg:hidden">
               <div className="flex min-w-0 items-center gap-3">
-                <Button variant="outline" size="icon" aria-label="Open sidebar" onClick={() => setSidebarOpen(true)}>
+                <Button variant="outline" size="icon" aria-label={t('header.openSidebar')} onClick={() => setSidebarOpen(true)}>
                   <Menu className="h-5 w-5" />
                 </Button>
                 <div className="flex min-w-0 items-center gap-2">
@@ -410,11 +416,12 @@ export function DriveLayout() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
+                <LanguageSwitcher />
+                <Button variant="outline" size="icon" aria-label={t('header.toggleTheme')} onClick={toggleTheme}>
                   {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                 </Button>
                 <div className="relative shrink-0">
-                  <Button variant="outline" size="icon" className="relative" aria-label="System info" aria-expanded={infoOpen} onClick={() => setInfoOpen(!infoOpen)}>
+                  <Button variant="outline" size="icon" className="relative" aria-label={t('header.systemInfo')} aria-expanded={infoOpen} onClick={() => setInfoOpen(!infoOpen)}>
                     <Bell className="h-5 w-5" />
                     {!infoOpen ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-blue-600" /> : null}
                   </Button>
@@ -425,36 +432,36 @@ export function DriveLayout() {
             <div className="relative w-full min-w-0 flex-1 lg:max-w-sm xl:max-w-xl">
               <form onSubmit={searchFiles} className="relative w-full">
                 <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-                <Input value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Search Documents" className="pl-11 pr-12" />
-                <button type="button" onClick={() => setFiltersOpen(!filtersOpen)} className={cn("absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-900 transition-colors", filtersOpen && "text-blue-600 hover:text-blue-700")} aria-label="Search filters"><SlidersHorizontal className="h-5 w-5" /></button>
+                <Input value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder={t('header.searchPlaceholder')} className="pl-11 pr-12" />
+                <button type="button" onClick={() => setFiltersOpen(!filtersOpen)} className={cn("absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-900 transition-colors", filtersOpen && "text-blue-600 hover:text-blue-700")} aria-label={t('header.searchFilters')}><SlidersHorizontal className="h-5 w-5" /></button>
               </form>
 
               {filtersOpen && (
                 <div className="absolute left-0 right-0 top-12 z-50 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <span className="text-sm font-extrabold text-slate-950">Advanced Search Filters</span>
-                    <button type="button" onClick={clearFilters} className="text-xs font-bold text-blue-600 hover:text-blue-700">Clear All</button>
+                    <span className="text-sm font-extrabold text-slate-950">{t('filters.title')}</span>
+                    <button type="button" onClick={clearFilters} className="text-xs font-bold text-blue-600 hover:text-blue-700">{t('filters.clearAll')}</button>
                   </div>
 
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     {/* File Kind */}
                     <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">File Type</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t('filters.fileType')}</label>
                       <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none">
-                        <option value="">All Types</option>
-                        <option value="image">Image</option>
-                        <option value="video">Video</option>
-                        <option value="pdf">PDF</option>
-                        <option value="doc">Document</option>
-                        <option value="archive">Archive</option>
+                        <option value="">{t('filters.allTypes')}</option>
+                        <option value="image">{t('filters.image')}</option>
+                        <option value="video">{t('filters.video')}</option>
+                        <option value="pdf">{t('filters.pdf')}</option>
+                        <option value="doc">{t('filters.document')}</option>
+                        <option value="archive">{t('filters.archive')}</option>
                       </select>
                     </div>
 
                     {/* Connected Account */}
                     <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Connected Account</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t('filters.account')}</label>
                       <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none">
-                        <option value="">All Accounts</option>
+                        <option value="">{t('filters.allAccounts')}</option>
                         {accounts.map((acc) => (
                           <option key={acc.id} value={acc.id}>{acc.email} ({acc.provider})</option>
                         ))}
@@ -463,28 +470,28 @@ export function DriveLayout() {
 
                     {/* Size range */}
                     <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Size Range (MB)</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t('filters.sizeRange')}</label>
                       <div className="mt-1 flex items-center gap-2">
-                        <input type="number" placeholder="Min" value={filterMinSize} onChange={(e) => setFilterMinSize(e.target.value)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none" />
-                        <span className="text-slate-400 text-xs font-semibold">to</span>
-                        <input type="number" placeholder="Max" value={filterMaxSize} onChange={(e) => setFilterMaxSize(e.target.value)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none" />
+                        <input type="number" placeholder={t('filters.min')} value={filterMinSize} onChange={(e) => setFilterMinSize(e.target.value)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none" />
+                        <span className="text-slate-400 text-xs font-semibold">{t('filters.to')}</span>
+                        <input type="number" placeholder={t('filters.max')} value={filterMaxSize} onChange={(e) => setFilterMaxSize(e.target.value)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none" />
                       </div>
                     </div>
 
                     {/* Date range */}
                     <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Date Range</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t('filters.dateRange')}</label>
                       <div className="mt-1 flex items-center gap-2">
                         <input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none" />
-                        <span className="text-slate-400 text-xs font-semibold">to</span>
+                        <span className="text-slate-400 text-xs font-semibold">{t('filters.to')}</span>
                         <input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-blue-500 focus:bg-white focus:outline-none" />
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
-                    <Button variant="outline" size="sm" type="button" onClick={() => setFiltersOpen(false)}>Cancel</Button>
-                    <Button variant="default" size="sm" type="button" onClick={applyFilters}>Apply Filters</Button>
+                    <Button variant="outline" size="sm" type="button" onClick={() => setFiltersOpen(false)}>{t('filters.cancel')}</Button>
+                    <Button variant="default" size="sm" type="button" onClick={applyFilters}>{t('filters.apply')}</Button>
                   </div>
                 </div>
               )}
@@ -495,11 +502,12 @@ export function DriveLayout() {
                 {headerActions}
               </div>
             ) : null}
-             <div className="relative hidden flex-wrap gap-2 lg:flex shrink-0">
-              <Button variant="outline" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
+             <div className="relative hidden flex-wrap items-center gap-2 lg:flex shrink-0">
+              <LanguageSwitcher />
+              <Button variant="outline" size="icon" aria-label={t('header.toggleTheme')} onClick={toggleTheme}>
                 {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
               </Button>
-              <Button variant="outline" size="icon" className="relative" aria-label="System info" aria-expanded={infoOpen} onClick={() => setInfoOpen(!infoOpen)}>
+              <Button variant="outline" size="icon" className="relative" aria-label={t('header.systemInfo')} aria-expanded={infoOpen} onClick={() => setInfoOpen(!infoOpen)}>
                 <Bell className="h-5 w-5" />
                 {!infoOpen ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-blue-600" /> : null}
               </Button>
@@ -515,7 +523,7 @@ export function DriveLayout() {
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <div className="flex items-center gap-2 font-extrabold text-sm text-slate-950">
               {uploadProgress.status === 'done' ? <CheckCircle className="h-5 w-5 text-emerald-500" /> : uploadProgress.status === 'partial' || uploadProgress.status === 'error' ? <X className="h-5 w-5 text-red-500" /> : <Upload className="h-5 w-5 text-blue-600" />}
-              {uploadProgress.status === 'done' ? 'Upload complete' : uploadProgress.status === 'partial' ? 'Upload completed with errors' : uploadProgress.status === 'error' ? 'Upload failed' : uploadProgress.percent >= 99 ? 'Processing on server' : 'Uploading files'}
+              {uploadProgress.status === 'done' ? t('upload.complete') : uploadProgress.status === 'partial' ? t('upload.completeWithErrors') : uploadProgress.status === 'error' ? t('upload.failed') : uploadProgress.percent >= 99 ? t('upload.processingServer') : t('upload.uploadingFiles')}
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setUploadProgressCollapsed(!uploadProgressCollapsed)}><ChevronDown className={cn("h-4 w-4 transition-transform", uploadProgressCollapsed && "rotate-180")} /></Button>
@@ -544,11 +552,11 @@ export function DriveLayout() {
                         <div className="flex items-center gap-2">
                           {file.status === 'error' && (
                             <Button variant="default" className="h-6 px-2 text-[11px] font-extrabold text-white bg-blue-600 hover:bg-blue-700 shadow-none border-none" onClick={() => retryFailedUpload(file.name)}>
-                              Retry
+                              {t('upload.retry')}
                             </Button>
                           )}
                           <span className={file.status === 'error' ? 'font-semibold text-red-600' : file.status === 'done' ? 'font-semibold text-emerald-600' : 'font-semibold text-blue-600'}>
-                            {file.status === 'error' ? 'Failed' : file.status === 'done' ? 'Done' : file.percent >= 99 ? 'Processing' : 'Uploading'}
+                            {file.status === 'error' ? t('upload.statusFailed') : file.status === 'done' ? t('upload.statusDone') : file.percent >= 99 ? t('upload.statusProcessing') : t('upload.statusUploading')}
                           </span>
                         </div>
                       </div>
