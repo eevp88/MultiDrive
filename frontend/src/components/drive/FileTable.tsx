@@ -4,8 +4,10 @@ import { AvatarStack } from '@/components/drive/AvatarStack'
 import { FileIcon } from '@/components/drive/FileIcon'
 import type { FileItem } from '@/data/drive-data'
 import { apiFetch } from '@/lib/api'
+import { useI18n } from '@/i18n/I18nProvider'
 
 export function FileTable({ files, mode = 'default', selectedFileIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleAll }: { files: FileItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleAll?: () => void }) {
+  const { t } = useI18n()
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null)
 
   return (
@@ -14,7 +16,7 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
       <div className="grid gap-2.5 sm:hidden">
         {onToggleAll ? (
           <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold shadow-sm">
-            <span>Select all files</span>
+            <span>{t('table.selectAll')}</span>
             <input type="checkbox" className="h-5 w-5 accent-blue-600" checked={allSelected} onChange={onToggleAll} />
           </label>
         ) : null}
@@ -35,7 +37,7 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
                     {file.folderName && <><span>·</span><span className="flex items-center gap-0.5 text-blue-500"><FolderOpen className="h-3 w-3" />{file.folderName}</span></>}
                   </div>
                 </div>
-                <button className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onFileContextMenu?.(event, file) }} aria-label={`Open ${file.name} menu`}><MoreVertical className="h-4 w-4" /></button>
+                <button className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onFileContextMenu?.(event, file) }} aria-label={t('table.openMenu', { name: file.name })}><MoreVertical className="h-4 w-4" /></button>
               </div>
             </article>
           )
@@ -48,15 +50,15 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
           <thead>
             <tr className="border-b border-slate-200/20 text-slate-950">
               <th className="w-9 py-2.5"><input type="checkbox" className="h-4 w-4 accent-blue-600" checked={allSelected} onChange={onToggleAll} /></th>
-              <th className="py-2.5 font-extrabold">Name</th>
-              {mode === 'default' ? <th className="py-2.5 font-extrabold text-slate-500 font-semibold">Folder</th> : null}
-              {mode === 'shared' ? <th className="py-2.5 font-extrabold">Owner</th> : null}
-              {mode === 'recent' ? <th className="py-2.5 font-extrabold">Last Opened</th> : null}
-              {mode === 'starred' ? <th className="py-2.5 font-extrabold">Starred On</th> : null}
-              {mode === 'archived' ? <th className="py-2.5 font-extrabold">Archived Date</th> : null}
-              {mode === 'archived' ? <th className="py-2.5 font-extrabold">Original Location</th> : <th className="py-2.5 font-extrabold">Last Modified</th>}
-              <th className="py-2.5 font-extrabold">Size</th>
-              <th className="py-2.5 font-extrabold">Access</th>
+              <th className="py-2.5 font-extrabold">{t('table.name')}</th>
+              {mode === 'default' ? <th className="py-2.5 font-extrabold text-slate-500 font-semibold">{t('table.folder')}</th> : null}
+              {mode === 'shared' ? <th className="py-2.5 font-extrabold">{t('table.owner')}</th> : null}
+              {mode === 'recent' ? <th className="py-2.5 font-extrabold">{t('table.lastOpened')}</th> : null}
+              {mode === 'starred' ? <th className="py-2.5 font-extrabold">{t('table.starredOn')}</th> : null}
+              {mode === 'archived' ? <th className="py-2.5 font-extrabold">{t('table.archivedDate')}</th> : null}
+              {mode === 'archived' ? <th className="py-2.5 font-extrabold">{t('table.originalLocation')}</th> : <th className="py-2.5 font-extrabold">{t('table.lastModified')}</th>}
+              <th className="py-2.5 font-extrabold">{t('table.size')}</th>
+              <th className="py-2.5 font-extrabold">{t('table.access')}</th>
               <th className="py-2.5" />
             </tr>
           </thead>
@@ -95,7 +97,7 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
                     {/* Hover shortcuts */}
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex gap-1.5">
                       <button
-                        title="Copy Link"
+                        title={t('action.copyLink')}
                         onClick={async (event) => {
                           event.stopPropagation()
                           try {
@@ -118,20 +120,20 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
                             : "inline-flex h-7 px-2 items-center justify-center rounded-lg text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
                         }
                       >
-                        {copiedFileId === file.id ? 'Copied!' : 'Copy Link'}
+                        {copiedFileId === file.id ? t('table.copied') : t('action.copyLink')}
                       </button>
                       <button
-                        title="Move File"
+                        title={t('table.moveFile')}
                         onClick={(event) => {
                           event.stopPropagation()
                           window.dispatchEvent(new CustomEvent('9drive:open-move-modal', { detail: file }))
                         }}
                         className="inline-flex h-7 px-2 items-center justify-center rounded-lg text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
                       >
-                        Move
+                        {t('table.move')}
                       </button>
                     </div>
-                    <button className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 shrink-0" onClick={(event) => { event.stopPropagation(); onFileContextMenu?.(event, file) }} aria-label={`Open ${file.name} menu`}><MoreVertical className="h-4 w-4" /></button>
+                    <button className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 shrink-0" onClick={(event) => { event.stopPropagation(); onFileContextMenu?.(event, file) }} aria-label={t('table.openMenu', { name: file.name })}><MoreVertical className="h-4 w-4" /></button>
                   </div>
                 </td>
               </tr>

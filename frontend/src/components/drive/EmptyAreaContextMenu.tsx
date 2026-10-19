@@ -1,4 +1,5 @@
 import { ClipboardPaste, FolderPlus, Upload } from 'lucide-react'
+import { useI18n } from '@/i18n/I18nProvider'
 
 type Props = {
   x: number
@@ -37,6 +38,7 @@ function MenuItem({ icon: Icon, label, onClick, accent = false }: { icon: React.
 }
 
 export function EmptyAreaContextMenu({ x, y, open, canPasteFolder = false, onClose, onUpload, onCreateFolder, onPasteFolder }: Props) {
+  const { t } = useI18n()
   if (!open) return null
   const safeX = Math.max(12, Math.min(x, window.innerWidth - 228))
   const safeY = Math.max(12, Math.min(y, window.innerHeight - 160))
@@ -45,7 +47,7 @@ export function EmptyAreaContextMenu({ x, y, open, canPasteFolder = false, onClo
     <>
       <button
         className="fixed inset-0 z-40 cursor-default"
-        aria-label="Close empty area menu"
+        aria-label={t('areaMenu.close')}
         onClick={onClose}
       />
       <div
@@ -57,12 +59,12 @@ export function EmptyAreaContextMenu({ x, y, open, canPasteFolder = false, onClo
         }
       >
         <div className="p-1.5">
-          <MenuItem icon={Upload} label="Upload File" onClick={onUpload} accent />
-          <MenuItem icon={FolderPlus} label="New Folder" onClick={onCreateFolder} />
+          <MenuItem icon={Upload} label={t('areaMenu.upload')} onClick={onUpload} accent />
+          <MenuItem icon={FolderPlus} label={t('areaMenu.newFolder')} onClick={onCreateFolder} />
           {canPasteFolder && onPasteFolder ? (
             <>
               <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
-              <MenuItem icon={ClipboardPaste} label="Paste Folder Here" onClick={onPasteFolder} />
+              <MenuItem icon={ClipboardPaste} label={t('areaMenu.pasteFolder')} onClick={onPasteFolder} />
             </>
           ) : null}
         </div>
