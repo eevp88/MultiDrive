@@ -7,11 +7,14 @@ import { GoogleLogo } from '@/components/auth/GoogleLogo'
 import { Input } from '@/components/ui/input'
 import { apiFetch } from '@/lib/api'
 import { setAuthSession, type AuthUser } from '@/lib/auth'
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
+import { useI18n } from '@/i18n/I18nProvider'
 
 type AuthResponse = { accessToken: string; refreshToken: string; user: AuthUser }
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const { t, translateError } = useI18n()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -25,7 +28,7 @@ export function LoginPage() {
       const data = await apiFetch<{ url: string }>('/auth/google/url', { skipAuth: true })
       window.location.href = data.url
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google login failed')
+      setError(translateError(err, 'auth.google.loginFailed'))
       setGoogleLoading(false)
     }
   }
@@ -39,7 +42,7 @@ export function LoginPage() {
       setAuthSession(data.accessToken, data.refreshToken, data.user)
       navigate('/all-files')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(translateError(err, 'auth.login.failed'))
     } finally {
       setLoading(false)
     }
@@ -48,21 +51,22 @@ export function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-5">
       <Card className="w-full max-w-md p-6">
+        <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white"><HardDrive className="h-6 w-6" /></div>
-          <div><h1 className="text-2xl font-extrabold">Login</h1><p className="text-sm text-slate-500">Access your 9Drive gateway.</p></div>
+          <div><h1 className="text-2xl font-extrabold">{t('auth.login.title')}</h1><p className="text-sm text-slate-500">{t('auth.login.subtitle')}</p></div>
         </div>
         <form onSubmit={submit} className="mt-6 grid gap-4">
-          <label className="grid gap-2 text-sm font-semibold">Email<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label className="grid gap-2 text-sm font-semibold">Password<Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          <label className="grid gap-2 text-sm font-semibold">{t('common.email')}<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label className="grid gap-2 text-sm font-semibold">{t('common.password')}<Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p> : null}
-          <Button disabled={loading}>{loading ? 'Logging in...' : 'Login'}</Button>
+          <Button disabled={loading}>{loading ? t('auth.login.submitting') : t('auth.login.submit')}</Button>
         </form>
         <div className="mt-4 grid gap-3">
-          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or<span className="h-px flex-1 bg-slate-200" /></div>
-          <Button variant="outline" disabled={googleLoading} onClick={continueWithGoogle}><GoogleLogo />{googleLoading ? 'Redirecting...' : 'Continue with Google'}</Button>
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t('common.or')}<span className="h-px flex-1 bg-slate-200" /></div>
+          <Button variant="outline" disabled={googleLoading} onClick={continueWithGoogle}><GoogleLogo />{googleLoading ? t('auth.google.redirecting') : t('auth.google.continue')}</Button>
         </div>
-        <p className="mt-5 text-center text-sm text-slate-500">No account? <Link className="font-bold text-blue-600" to="/register">Register</Link></p>
+        <p className="mt-5 text-center text-sm text-slate-500">{t('auth.login.noAccount')} <Link className="font-bold text-blue-600" to="/register">{t('auth.login.registerLink')}</Link></p>
       </Card>
     </main>
   )

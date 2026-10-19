@@ -7,6 +7,8 @@ import { GoogleLogo } from '@/components/auth/GoogleLogo'
 import { Input } from '@/components/ui/input'
 import { apiFetch } from '@/lib/api'
 import { setAuthSession, type AuthUser } from '@/lib/auth'
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher'
+import { useI18n } from '@/i18n/I18nProvider'
 
 type AuthResponse = { accessToken: string; refreshToken: string; user: AuthUser }
 const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY?.trim()
@@ -22,6 +24,7 @@ declare global {
 
 export function RegisterPage() {
   const navigate = useNavigate()
+  const { t, translateError } = useI18n()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -64,7 +67,7 @@ export function RegisterPage() {
       const data = await apiFetch<{ url: string }>('/auth/google/url', { skipAuth: true })
       window.location.href = data.url
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google register failed')
+      setError(translateError(err, 'auth.google.registerFailed'))
       setGoogleLoading(false)
     }
   }
@@ -74,7 +77,7 @@ export function RegisterPage() {
     setLoading(true)
     setError('')
     if (recaptchaSiteKey && !captchaToken) {
-      setError('Please complete the captcha.')
+      setError(t('auth.register.captcha'))
       setLoading(false)
       return
     }
@@ -83,7 +86,7 @@ export function RegisterPage() {
       setAuthSession(data.accessToken, data.refreshToken, data.user)
       navigate('/all-files')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Register failed')
+      setError(translateError(err, 'auth.register.failed'))
       if (recaptchaWidgetId.current !== null) window.grecaptcha?.reset(recaptchaWidgetId.current)
       setCaptchaToken('')
     } finally {
@@ -94,23 +97,24 @@ export function RegisterPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-5">
       <Card className="w-full max-w-md p-6">
+        <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white"><HardDrive className="h-6 w-6" /></div>
-          <div><h1 className="text-2xl font-extrabold">Register</h1><p className="text-sm text-slate-500">Create your storage gateway account.</p></div>
+          <div><h1 className="text-2xl font-extrabold">{t('auth.register.title')}</h1><p className="text-sm text-slate-500">{t('auth.register.subtitle')}</p></div>
         </div>
         <form onSubmit={submit} className="mt-6 grid gap-4">
-          <label className="grid gap-2 text-sm font-semibold">Name<Input value={name} onChange={(e) => setName(e.target.value)} required /></label>
-          <label className="grid gap-2 text-sm font-semibold">Email<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label className="grid gap-2 text-sm font-semibold">Password<Input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          <label className="grid gap-2 text-sm font-semibold">{t('common.name')}<Input value={name} onChange={(e) => setName(e.target.value)} required /></label>
+          <label className="grid gap-2 text-sm font-semibold">{t('common.email')}<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label className="grid gap-2 text-sm font-semibold">{t('common.password')}<Input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           {recaptchaSiteKey ? <div className="min-h-[78px] overflow-hidden rounded-xl bg-slate-50 p-2"><div ref={recaptchaRef} /></div> : null}
           {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p> : null}
-          <Button disabled={loading}>{loading ? 'Creating...' : 'Create Account'}</Button>
+          <Button disabled={loading}>{loading ? t('auth.register.submitting') : t('auth.register.submit')}</Button>
         </form>
         <div className="mt-4 grid gap-3">
-          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />or<span className="h-px flex-1 bg-slate-200" /></div>
-          <Button variant="outline" disabled={googleLoading} onClick={continueWithGoogle}><GoogleLogo />{googleLoading ? 'Redirecting...' : 'Continue with Google and connect Drive'}</Button>
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t('common.or')}<span className="h-px flex-1 bg-slate-200" /></div>
+          <Button variant="outline" disabled={googleLoading} onClick={continueWithGoogle}><GoogleLogo />{googleLoading ? t('auth.google.redirecting') : t('auth.google.continueConnect')}</Button>
         </div>
-        <p className="mt-5 text-center text-sm text-slate-500">Already registered? <Link className="font-bold text-blue-600" to="/login">Login</Link></p>
+        <p className="mt-5 text-center text-sm text-slate-500">{t('auth.register.hasAccount')} <Link className="font-bold text-blue-600" to="/login">{t('auth.register.loginLink')}</Link></p>
       </Card>
     </main>
   )

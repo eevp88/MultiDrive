@@ -9,6 +9,16 @@ export const API_URL = (rawApiUrl && rawApiUrl !== 'http://localhost:4000')
 
 type ApiOptions = RequestInit & { skipAuth?: boolean; retry?: boolean }
 
+export class ApiError extends Error {
+  code?: string
+
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+  }
+}
+
 async function refreshAccessToken() {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return false
@@ -37,7 +47,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText }))
     if (response.status === 401) clearAuthSession()
-    throw new Error(error.message ?? 'Request failed')
+    throw new ApiError(error.message ?? 'Request failed', error.code)
   }
 
   return response.json() as Promise<T>
