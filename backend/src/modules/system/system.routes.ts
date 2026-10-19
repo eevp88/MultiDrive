@@ -3,14 +3,18 @@ import { exec, spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { requireAuth } from '../../middleware/auth.middleware.js'
+import { requireAdmin } from '../../middleware/admin.middleware.js'
 import { prisma } from '../../config/prisma.js'
 import { decryptText, encryptText } from '../../utils/crypto.js'
 import Busboy from 'busboy'
 
 export const systemRouter = Router()
 
+// Every /system route changes or exposes instance-wide state, so only admins may use them.
+systemRouter.use(requireAuth, requireAdmin)
 
-systemRouter.post('/update', requireAuth, (req, res, next) => {
+
+systemRouter.post('/update', (req, res, next) => {
   const projectRoot = path.resolve(process.cwd(), '..')
   const updateScript = path.join(projectRoot, 'update.sh')
 
@@ -76,7 +80,7 @@ systemRouter.post('/update', requireAuth, (req, res, next) => {
   })
 })
 
-systemRouter.get('/update-log', requireAuth, (req, res) => {
+systemRouter.get('/update-log', (req, res) => {
   const projectRoot = path.resolve(process.cwd(), '..')
   const logFile = path.join(projectRoot, 'update.log')
 
@@ -100,7 +104,7 @@ systemRouter.get('/update-log', requireAuth, (req, res) => {
   }
 })
 
-systemRouter.get('/google-config', requireAuth, async (req, res, next) => {
+systemRouter.get('/google-config', async (req, res, next) => {
   try {
     const config = await prisma.providerConfig.findFirst({
       where: { userId: null, provider: 'google_drive', status: 'active' },
@@ -135,7 +139,7 @@ systemRouter.get('/google-config', requireAuth, async (req, res, next) => {
   }
 })
 
-systemRouter.post('/google-config', requireAuth, async (req, res, next) => {
+systemRouter.post('/google-config', async (req, res, next) => {
   try {
     const { clientId, clientSecret, redirectUri } = req.body
 
@@ -200,7 +204,7 @@ systemRouter.post('/google-config', requireAuth, async (req, res, next) => {
   }
 })
 
-systemRouter.get('/backup', requireAuth, (req, res, next) => {
+systemRouter.get('/backup', (req, res, next) => {
   try {
     const dbPath = getDatabaseFilePath()
     if (!fs.existsSync(dbPath)) {
@@ -215,7 +219,7 @@ systemRouter.get('/backup', requireAuth, (req, res, next) => {
   }
 })
 
-systemRouter.post('/restore', requireAuth, (req, res, next) => {
+systemRouter.post('/restore', (req, res, next) => {
   try {
     const contentType = req.headers['content-type']
     if (!contentType?.includes('multipart/form-data')) {
