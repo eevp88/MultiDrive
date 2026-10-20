@@ -206,7 +206,7 @@ export const es: Messages = {
   'files.sharePublic': 'Enlace público de 9Drive (no requiere iniciar sesión en Google Drive)',
   'files.shareCopied': 'Enlace copiado al portapapeles.',
   'files.gdriveDirect': 'Enlace directo de Google Drive (acceso público)',
-  'files.gdriveDesc': 'Configura este archivo como público en Google Drive para que herramientas externas puedan editarlo o descargarlo.',
+  'files.gdriveDesc': 'Hace este archivo visible en Google Drive para cualquiera que tenga el enlace, para que herramientas externas puedan verlo o descargarlo. Es de solo lectura y 9Drive no puede revocarlo: se quita desde las opciones de compartir de Drive.',
   'files.gdriveDone': '¡Enlace público de Google Drive generado y copiado al portapapeles!',
   'files.makingPublic': 'Haciendo público...',
   'files.makePublic': 'Hacer público y copiar enlace de GDrive',

@@ -204,7 +204,7 @@ export const en = {
   'files.sharePublic': '9Drive Public Share Link (No GDrive login required)',
   'files.shareCopied': 'Share link copied to clipboard.',
   'files.gdriveDirect': 'Google Drive Direct Link (Public Access)',
-  'files.gdriveDesc': 'Configure this file to be publicly accessible on Google Drive so external tools can edit/download it.',
+  'files.gdriveDesc': 'Makes this file visible in Google Drive to anyone with the link, so external tools can view or download it. It is read only and 9Drive cannot revoke it: remove it from Drive\'s sharing settings.',
   'files.gdriveDone': 'Google Drive public link generated and copied to clipboard!',
   'files.makingPublic': 'Making Public...',
   'files.makePublic': 'Make Public & Copy GDrive Link',
