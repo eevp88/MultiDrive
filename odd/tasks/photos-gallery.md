@@ -1,7 +1,7 @@
 # photos-gallery
 
 Objective: a photo gallery view in 9Drive across the connected Google accounts (the "multiFoto" idea), without Google Photos.
-Branch: `feat/photos-gallery` | Delivery strategy: `stacked-to-main` (assumed, see L8) | Test runner: none (backend and frontend have no test script)
+Branch: `feat/photos-gallery` | Delivery strategy: `stacked-to-main` (assumed, see L8; PRs merged in order) | Test runner: none (backend and frontend have no test script)
 
 ## Specs
 
@@ -21,7 +21,7 @@ Quotes are the user's exact words. Items marked (assumption) come from the assis
 - [x] T2 | S3 | inline | `imageMediaMetadata(time)` requested in `syncGoogleAppFolderFiles` and stored as `takenAt`; commit: 8f1e4d3 (observed end to end against the real Drive, see L17)
 - [x] T3 | S2, S7 | inline | `GET /files/:id/thumbnail` proxy with cache headers and no token leakage; commit: 18fd742 (observed on real Drive images: JPEG, HEIF served as JPEG, PNG; size, auth, ownership, S3 and validation cases; no Google URL in headers, body or logs)
 - [x] T4 | S4 | inline | `GET /photos` with cursor pagination; commit: ffb35c3 (observed: 30 visible rows walked in 5 pages with no repeats or gaps, strict (date, id) order, ties and null taken_at, user isolation, invalid cursor and limit cases)
-- [x] T5 | S1, S5 | inline | `/fotos` page, sidebar entry, i18n en and es; commit: d26ebbd (frontend build passes; served by the rebuilt frontend container; browser check by the user pending, see L20)
+- [x] T5 | S1, S5 | inline | `/fotos` page, sidebar entry, i18n en and es; commit: d26ebbd (frontend build passes; served by the rebuilt frontend container; opened in the browser by the user, see L21 and L23)
 - [x] T6 | S7 | inline | README and AGENTS.md API notes, end-to-end check against a real Drive account; commit: see L21 (docs written; end-to-end covered by L13, L17 and the browser check in L21)
 
 Route declaration: every task inline. No writer trigger applies: the tasks are sequential and share files, nothing runs in parallel. Exploration was done inline within the evidence budget.
@@ -60,3 +60,5 @@ Push, pull request creation and merge are the user's decisions.
 - L19 (2026-10-20, user): "dale T5". Branch `feat/photos-view` from main.
 - L20 (2026-10-20, progress): T5 committed (d26ebbd). `/fotos` route and sidebar entry, month-grouped grid, thumbnails loaded lazily with IntersectionObserver and fetched with the Bearer token into object URLs (revoked on unmount), a new viewer (Esc and arrow keys; images use `size=2048`, so HEIF displays; videos use the existing preview-token flow), cursor "load more", i18n en and es. S5 says "click opens the existing preview"; the existing preview is embedded in AllFilesPage and cannot show HEIF, so a small dedicated viewer was written instead (deviation from S5, reason in L11 and L14). Only one real image row exists in the user's database, so scroll and pagination in the browser were not exercised with a large library. Next: T6.
 - L21 (2026-10-20, user, then evidence): the user opened `/fotos` in the browser and sent a screenshot: sidebar entry present, the real PNG shown as a thumbnail under the month heading through the Bearer fetch and the backend proxy. The heading showed "Octubre De 2026" (CSS `capitalize`); the user answered "dale" to fixing it and it now capitalizes only the first letter. T6: README Features line and AGENTS.md (Photos API notes, thumbnail route, PhotosPage file entry) updated. Not exercised in a browser: the viewer, keyboard navigation, "load more" and HEIF, because the database holds a single image row. Open decisions still with the user: A versus B for S3 thumbnails (L6).
+- L22 (2026-10-20, user, decision): "dejemos las miniaturas de S3 como están". Resolves L6: option A stays. Thumbnails exist only for Google Drive files; S3 files keep the generic icon. S3 thumbnails remain out of scope (S6).
+- L23 (2026-10-20, progress, feature closed): all tasks done and merged to main. T5 and T6 shipped in PR #16. Follow-ups after the user tried the page in the browser: PR #17 added arrow-key navigation over the grid (the user's "las flechas no cambia" was about the grid, not the viewer; the viewer was verified separately with Chromium, including HEIF), PR #18 renamed the product from 9Drive to MultiDrive everywhere (the Drive folder is renamed in place, browser keys are migrated; DB names and the S3 key prefix were kept on purpose) and PR #19 replaced the "9" logo with a tilted M. The three test copies created in the user's Drive for the viewer check were deleted afterwards. Known limit: "load more" was not exercised with a library larger than one page.
