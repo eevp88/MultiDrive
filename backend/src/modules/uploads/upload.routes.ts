@@ -10,6 +10,7 @@ import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.
 import { ensureGoogleAppFolder, getAuthedGoogleClient, syncGoogleQuota } from '../google/google.service.js'
 import { buildS3ObjectKey, getS3ConfigForAccount, syncS3Quota, uploadS3Object } from '../s3/s3.service.js'
 import { createAuditLog } from '../../utils/audit.js'
+import { HttpError } from '../../utils/http-error.js'
 
 export const uploadRouter = Router()
 
@@ -279,7 +280,7 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
       logUpload('multipart parser failed', { message: error instanceof Error ? error.message : 'Unknown error' })
       if (!responded) {
         responded = true
-        next(error)
+        next(new HttpError(400, 'UPLOAD_MALFORMED', 'Malformed multipart upload.'))
       }
     })
 
@@ -376,11 +377,13 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
 
     if (!initRes.ok) {
       const errText = await initRes.text()
-      throw new Error(`Google API Init Error: ${errText}`)
+      // The provider's response body stays in the server log; the client only gets a generic message.
+      logUpload('google resumable init failed', { status: initRes.status, body: errText.slice(0, 300) })
+      throw new HttpError(502, 'GOOGLE_API_ERROR', 'Google Drive rejected the upload request.')
     }
 
     const sessionUri = initRes.headers.get('location')
-    if (!sessionUri) throw new Error('Google API did not return Location header.')
+    if (!sessionUri) throw new HttpError(502, 'GOOGLE_API_ERROR', 'Google Drive did not return an upload session.')
 
     const session = await prisma.uploadSession.create({
       data: {
