@@ -90,6 +90,7 @@ Security rules:
 - App refresh tokens are hashed before database storage.
 - Auth handoff, share, and preview tokens are stored as hashes where applicable.
 - Uploaded files must stream through backend to Google Drive folder `9drive`; do not store uploaded files on disk.
+- Never grant Google Drive permissions automatically. Uploads and `GET /files/:id/view-url` leave the file private; `view-url` returns the Drive link only if the file is already public and `url: null` otherwise, so the UI falls back to a 9Drive share link (read only, revocable). Only the explicit `POST /files/:id/public-permission` opens a Drive file, as `anyone` with `reader`. 9Drive has no way to remove a Drive permission, so never use `writer` for `anyone`.
 - Keep CORS restricted by `FRONTEND_URL`.
 - Keep auth/token storage behavior centralized; do not change without explicit reason.
 
