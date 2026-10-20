@@ -189,7 +189,7 @@ authRouter.post('/logout', requireAuth, async (req: AuthRequest, res, next) => {
 
 authRouter.get('/me', requireAuth, async (req: AuthRequest, res, next) => {
   try {
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id }, select: { id: true, name: true, email: true, status: true } })
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id }, select: { id: true, name: true, email: true, status: true, role: true } })
     return res.json({ user })
   } catch (error) {
     return next(error)
