@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { DummyModal } from '@/components/drive/DummyModal'
 import { PageHeader } from '@/components/drive/PageHeader'
 import { apiFetch, formatBytes } from '@/lib/api'
+import { connectUrlPath, providerName, type ConnectableProvider } from '@/lib/providers'
 import { getGravatarUrl } from '@/lib/gravatar'
 import { getStoredUser } from '@/lib/auth'
 import { useI18n } from '@/i18n/I18nProvider'
@@ -14,8 +15,7 @@ type ConnectedAccount = { id: string; provider: string; email: string; displayNa
 type Translate = ReturnType<typeof useI18n>['t']
 
 function providerLabel(provider: string, t: Translate) {
-  if (provider === 's3') return t('settings.s3Name')
-  return 'Google Drive'
+  return providerName(provider, t('settings.s3Name'))
 }
 
 function storageLimitLabel(account: ConnectedAccount, t: Translate) {
@@ -198,7 +198,8 @@ export function SettingsPage() {
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.data?.type !== 'GOOGLE_CONNECTED') return
-      setMessage(event.data.status === 'success' ? t('settings.driveConnected') : t('settings.driveConnectFailed'))
+      const oneDrive = event.data.provider === 'onedrive'
+      setMessage(event.data.status === 'success' ? t(oneDrive ? 'settings.oneDriveConnected' : 'settings.driveConnected') : t(oneDrive ? 'settings.oneDriveConnectFailed' : 'settings.driveConnectFailed'))
       load().then(() => {
         window.dispatchEvent(new Event('multidrive:storage-changed'))
       }).catch(() => undefined)
@@ -207,15 +208,15 @@ export function SettingsPage() {
     return () => window.removeEventListener('message', onMessage)
   }, [t])
 
-  async function connectDrive() {
+  async function connectDrive(provider: ConnectableProvider = 'google') {
     setConnecting(true)
     setMessage('')
     const popup = window.open('', 'google-drive-connect', 'width=540,height=720')
     if (popup) {
-      popup.document.write(`<html><head><title>${t('settings.popupTitle')}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#64748b;}</style></head><body><div style="text-align:center;"><h2>${t('settings.popupHeading')}</h2><p>${t('settings.popupWait')}</p></div></body></html>`)
+      popup.document.write(`<html><head><title>${t('settings.popupTitle')}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#64748b;}</style></head><body><div style="text-align:center;"><h2>${provider === 'onedrive' ? t('settings.popupHeadingMicrosoft') : t('settings.popupHeading')}</h2><p>${t('settings.popupWait')}</p></div></body></html>`)
     }
     try {
-      const data = await apiFetch<{ url: string }>('/connected-accounts/google/connect-url')
+      const data = await apiFetch<{ url: string }>(connectUrlPath(provider))
       if (popup) {
         popup.location.href = data.url
       } else {
@@ -223,7 +224,7 @@ export function SettingsPage() {
       }
     } catch (error) {
       if (popup) popup.close()
-      setMessage(translateError(error, 'settings.driveStartFailed'))
+      setMessage(translateError(error, provider === 'onedrive' ? 'settings.oneDriveStartFailed' : 'settings.driveStartFailed'))
     } finally {
       setConnecting(false)
     }
@@ -277,7 +278,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t('nav.settings')} description={t('settings.description')} actions={<><Button variant="outline" size="sm" onClick={() => setS3Open(true)}><Database className="h-4 w-4" />{t('settings.connectS3')}</Button><Button size="sm" onClick={connectDrive} disabled={connecting}><Link2 className="h-4 w-4" />{connecting ? t('settings.connecting') : t('settings.connectDrive')}</Button></>} />
+      <PageHeader title={t('nav.settings')} description={t('settings.description')} actions={<><Button variant="outline" size="sm" onClick={() => setS3Open(true)}><Database className="h-4 w-4" />{t('settings.connectS3')}</Button><Button size="sm" onClick={() => connectDrive('google')} disabled={connecting}><Link2 className="h-4 w-4" />{connecting ? t('settings.connecting') : t('settings.connectDrive')}</Button></>} />
       {message ? <p className="mt-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p> : null}
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_280px]">
         <div className="grid gap-4">
@@ -305,7 +306,17 @@ export function SettingsPage() {
                 <div className="flex items-center gap-2.5"><Cloud className="h-5 w-5 text-blue-600" /><h2 className="text-[16px] font-bold">Google Drive</h2></div>
                 <p className="mt-1 text-[13px] text-slate-500">{t('settings.driveDesc')}</p>
               </div>
-              <Button className="w-full sm:w-32" size="sm" onClick={connectDrive} disabled={connecting}><Link2 className="h-4 w-4" />{connecting ? t('settings.opening') : t('settings.connectDrive')}</Button>
+              <Button className="w-full sm:w-32" size="sm" onClick={() => connectDrive('google')} disabled={connecting}><Link2 className="h-4 w-4" />{connecting ? t('settings.opening') : t('settings.connectDrive')}</Button>
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden p-3.5">
+            <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2.5"><Cloud className="h-5 w-5 text-blue-600" /><h2 className="text-[16px] font-bold">OneDrive</h2></div>
+                <p className="mt-1 text-[13px] text-slate-500">{t('settings.oneDriveDesc')}</p>
+              </div>
+              <Button className="w-full sm:w-40" size="sm" onClick={() => connectDrive('onedrive')} disabled={connecting}><Link2 className="h-4 w-4" />{connecting ? t('settings.opening') : t('settings.connectOneDrive')}</Button>
             </div>
           </Card>
 

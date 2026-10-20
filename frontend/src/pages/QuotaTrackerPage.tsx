@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { PageHeader } from '@/components/drive/PageHeader'
 import { apiFetch, formatBytes } from '@/lib/api'
+import { connectUrlPath, providerName, type ConnectableProvider } from '@/lib/providers'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n/I18nProvider'
 
@@ -15,8 +16,7 @@ type RoutingPolicy = { mode: RoutingMode; priorityAccountIds: string[]; roundRob
 type Translate = ReturnType<typeof useI18n>['t']
 
 function providerLabel(provider: string, t: Translate) {
-  if (provider === 's3') return t('settings.s3Name')
-  return 'Google Drive'
+  return providerName(provider, t('settings.s3Name'))
 }
 
 function ProviderIcon({ provider }: { provider: string }) {
@@ -89,20 +89,21 @@ export function QuotaTrackerPage() {
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.data?.type !== 'GOOGLE_CONNECTED') return
-      setMessage(event.data.status === 'success' ? t('settings.driveConnected') : t('settings.driveConnectFailed'))
+      const oneDrive = event.data.provider === 'onedrive'
+      setMessage(event.data.status === 'success' ? t(oneDrive ? 'settings.oneDriveConnected' : 'settings.driveConnected') : t(oneDrive ? 'settings.oneDriveConnectFailed' : 'settings.driveConnectFailed'))
       load().catch(() => undefined)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [t])
 
-  async function connectDrive() {
+  async function connectDrive(provider: ConnectableProvider = 'google') {
     const popup = window.open('', 'google-drive-connect', 'width=540,height=720')
     if (popup) {
-      popup.document.write(`<html><head><title>${t('settings.popupTitle')}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#64748b;}</style></head><body><div style="text-align:center;"><h2>${t('settings.popupHeading')}</h2><p>${t('settings.popupWait')}</p></div></body></html>`)
+      popup.document.write(`<html><head><title>${t('settings.popupTitle')}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#64748b;}</style></head><body><div style="text-align:center;"><h2>${provider === 'onedrive' ? t('settings.popupHeadingMicrosoft') : t('settings.popupHeading')}</h2><p>${t('settings.popupWait')}</p></div></body></html>`)
     }
     try {
-      const data = await apiFetch<{ url: string }>('/connected-accounts/google/connect-url')
+      const data = await apiFetch<{ url: string }>(connectUrlPath(provider))
       if (popup) {
         popup.location.href = data.url
       } else {
@@ -151,7 +152,7 @@ export function QuotaTrackerPage() {
 
   return (
     <>
-      <PageHeader title={t('nav.quota')} description={t('quota.description')} actions={<><Button variant="outline" onClick={() => setAutoRefresh(!autoRefresh)}><CheckCircle className="h-4 w-4" />{autoRefresh ? t('quota.autoRefreshOn') : t('quota.autoRefreshOff')}</Button><Button variant="outline" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />{refreshing ? t('quota.refreshing') : t('quota.refresh')}</Button><Button onClick={connectDrive}><Link2 className="h-4 w-4" />{t('settings.connectDrive')}</Button></>} />
+      <PageHeader title={t('nav.quota')} description={t('quota.description')} actions={<><Button variant="outline" onClick={() => setAutoRefresh(!autoRefresh)}><CheckCircle className="h-4 w-4" />{autoRefresh ? t('quota.autoRefreshOn') : t('quota.autoRefreshOff')}</Button><Button variant="outline" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />{refreshing ? t('quota.refreshing') : t('quota.refresh')}</Button><Button variant="outline" onClick={() => connectDrive('onedrive')}><Link2 className="h-4 w-4" />{t('settings.connectOneDrive')}</Button><Button onClick={() => connectDrive('google')}><Link2 className="h-4 w-4" />{t('settings.connectDrive')}</Button></>} />
       {message ? <p className="mt-5 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p> : null}
 
       <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
@@ -193,7 +194,10 @@ export function QuotaTrackerPage() {
             <Cloud className="mx-auto h-10 w-10 text-blue-600" />
             <h2 className="mt-4 text-xl font-extrabold">{t('quota.noDrives')}</h2>
             <p className="mt-2 text-sm text-slate-500">{t('quota.noDrivesDesc')}</p>
-            <Button className="mt-5" onClick={connectDrive}><Link2 className="h-4 w-4" />{t('settings.connectDrive')}</Button>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => connectDrive('google')}><Link2 className="h-4 w-4" />{t('settings.connectDrive')}</Button>
+              <Button variant="outline" onClick={() => connectDrive('onedrive')}><Link2 className="h-4 w-4" />{t('settings.connectOneDrive')}</Button>
+            </div>
           </Card>
         ) : accounts.map((account) => {
           const percent = pct(account)
