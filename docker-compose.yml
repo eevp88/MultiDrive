@@ -5,16 +5,16 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env (e.g. openssl rand -hex 24)}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-9drive}
       MYSQL_USER: ${MYSQL_USER:-9drive}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-this-database-password}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env (e.g. openssl rand -hex 24)}
     ports:
       - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -31,7 +31,7 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: mysql://${MYSQL_USER:-9drive}:${MYSQL_PASSWORD:-change-this-database-password}@mysql:3306/${MYSQL_DATABASE:-9drive}
+      DATABASE_URL: mysql://${MYSQL_USER:-9drive}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-9drive}
       APP_PORT: 4000
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env (min 32 chars, e.g. openssl rand -base64 48)}

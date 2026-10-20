@@ -413,7 +413,8 @@ Copy-Item .env.docker.example .env
 Edit `.env`:
 
 ```env
-MYSQL_ROOT_PASSWORD=root
+MYSQL_ROOT_PASSWORD=replace-with-output-of-openssl-rand-hex-24
+MYSQL_PASSWORD=replace-with-output-of-openssl-rand-hex-24
 MYSQL_DATABASE=9drive
 
 FRONTEND_URL=http://localhost:5173
@@ -432,6 +433,21 @@ GOOGLE_REDIRECT_URI=http://localhost:4000/connected-accounts/google/callback
 Captcha is disabled when either `VITE_RECAPTCHA_SITE_KEY` or `RECAPTCHA_SECRET_KEY` is empty.
 
 `JWT_ACCESS_SECRET` and `TOKEN_ENCRYPTION_KEY` are required (minimum 32 characters): `docker compose` refuses to start if either is missing. Generate each with `openssl rand -base64 48`. Changing `TOKEN_ENCRYPTION_KEY` on an existing install makes the stored Google tokens undecryptable, so accounts must be reconnected.
+
+`MYSQL_ROOT_PASSWORD` and `MYSQL_PASSWORD` are also required, with no default. Generate them with `openssl rand -hex 24`, not `-base64`: the app password is embedded in `DATABASE_URL`, and `+`, `/` and `=` break it.
+
+#### Upgrading an install that used the old defaults
+
+Older versions fell back to `root` and `change-this-database-password` when these variables were unset. MySQL only reads them the first time the data volume is created, so changing `.env` alone does not change the passwords of an existing database. Rotate them in this order, with the stack still running:
+
+```bash
+NEW_ROOT=$(openssl rand -hex 24); NEW_APP=$(openssl rand -hex 24)
+docker compose exec -T mysql sh -c "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -e \"ALTER USER 'root'@'localhost' IDENTIFIED BY '$NEW_ROOT'; ALTER USER 'root'@'%' IDENTIFIED BY '$NEW_ROOT'; ALTER USER '9drive'@'%' IDENTIFIED BY '$NEW_APP';\""
+echo "MYSQL_ROOT_PASSWORD=$NEW_ROOT"; echo "MYSQL_PASSWORD=$NEW_APP"   # put these two lines in .env
+docker compose up -d
+```
+
+Replace `9drive` with your `MYSQL_USER` if you changed it. If `.env` already set both variables to values you chose, there is nothing to rotate.
 
 ### 2. Start Containers
 
