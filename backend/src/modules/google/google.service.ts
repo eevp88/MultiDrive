@@ -2,6 +2,7 @@ import { google } from 'googleapis'
 import type { ConnectedAccount, ProviderConfig } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { decryptText, encryptText } from '../../utils/crypto.js'
+import { HttpError } from '../../utils/http-error.js'
 
 const googleDriveFolderMimeType = 'application/vnd.google-apps.folder'
 const appFolderName = '9drive'
@@ -11,8 +12,8 @@ export function createOAuthClient(config: ProviderConfig) {
 }
 
 export async function getAuthedGoogleClient(account: ConnectedAccount) {
-  if (!account.accessTokenEncrypted || !account.refreshTokenEncrypted || !account.tokenExpiresAt) throw new Error('Google account tokens are missing.')
-  if (!account.providerConfigId) throw new Error('Google provider config is missing.')
+  if (!account.accessTokenEncrypted || !account.refreshTokenEncrypted || !account.tokenExpiresAt) throw new HttpError(409, 'ACCOUNT_RECONNECT_REQUIRED', 'Google account tokens are missing.')
+  if (!account.providerConfigId) throw new HttpError(409, 'ACCOUNT_RECONNECT_REQUIRED', 'Google provider config is missing.')
   const config = await prisma.providerConfig.findUniqueOrThrow({ where: { id: account.providerConfigId } })
   const client = createOAuthClient(config)
   client.setCredentials({
