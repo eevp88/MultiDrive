@@ -364,7 +364,7 @@ http://localhost:5173
 
 ## Administrators
 
-Instance-wide settings (`/system/*`: Google OAuth credentials, system update, database backup/restore) are restricted to users with the `admin` role. Everyone else gets `403 ADMIN_REQUIRED`, and the Settings page hides those cards.
+Instance-wide settings (`/system/*`: Google OAuth credentials, system update) are restricted to users with the `admin` role. Everyone else gets `403 ADMIN_REQUIRED`, and the Settings page hides those cards.
 
 New users are always created as regular users. Promote one from the server, after they have registered:
 
@@ -690,6 +690,22 @@ file
 - Use strong secrets.
 - Put the backend behind HTTPS.
 - Consider secure cookies or stronger token storage for production.
+
+## Database Backups
+
+The app does not back up or restore its own database. Do it from the host with `mysqldump` (Docker Compose):
+
+```bash
+# Backup
+docker compose exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines "$MYSQL_DATABASE"' > 9drive-backup.sql
+
+# Restore into the same (or a fresh) database
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < 9drive-backup.sql
+```
+
+- The dump holds password hashes and encrypted Google tokens. Store it like a secret.
+- Keep `TOKEN_ENCRYPTION_KEY` alongside your backups: without the same key, restored Google tokens cannot be decrypted and accounts must be reconnected.
+- Restoring drops and recreates the tables in the dump, so stop the backend first (`docker compose stop backend`) and start it again afterwards.
 
 ## Google OAuth Configuration via UI
 
