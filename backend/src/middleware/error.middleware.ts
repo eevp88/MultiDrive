@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import { Prisma } from '@prisma/client'
 import { ZodError } from 'zod'
-import { HttpError } from '../utils/http-error.js'
+import { HttpError, describeError } from '../utils/http-error.js'
 
 // Body-parser errors (malformed JSON, payload too large) carry a 4xx status and a message that is safe to show.
 function clientStatus(error: unknown) {
@@ -22,9 +22,6 @@ export function errorMiddleware(error: unknown, _req: Request, res: Response, _n
   const status = clientStatus(error)
   if (status) return res.status(status).json({ code: status === 413 ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST', message: (error as Error).message })
 
-  // Prisma messages embed query arguments (emails, hashes) and connection details, so log only their type and code.
-  // Other messages are logged truncated, server-side only, so failures stay diagnosable.
-  const detail = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : error instanceof Error && !error.name.startsWith('PrismaClient') ? error.message.slice(0, 300) : ''
-  console.error('Unhandled error:', error instanceof Error ? error.name : 'unknown error', detail)
+  console.error('Unhandled error:', describeError(error))
   return res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: 'Internal server error.' })
 }
