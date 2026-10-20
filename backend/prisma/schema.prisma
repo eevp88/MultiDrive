@@ -215,6 +215,7 @@ model File {
   mimeType           String           @map("mime_type") @db.VarChar(191)
   sizeBytes          BigInt           @map("size_bytes")
   checksum           String?          @db.VarChar(191)
+  takenAt            DateTime?        @map("taken_at")
   status             String           @default("active") @db.VarChar(32)
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
