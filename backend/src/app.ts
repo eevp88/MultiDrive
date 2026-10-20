@@ -17,7 +17,15 @@ import { auditLogRouter } from './modules/audit-logs/audit-log.routes.js'
 import { systemRouter } from './modules/system/system.routes.js'
 
 export const app = express()
-app.set('trust proxy', true)
+// A hop count, not `true`: `true` trusts the client-supplied left end of X-Forwarded-For, so req.ip (rate limits, session IPs) could be spoofed.
+app.set('trust proxy', env.TRUST_PROXY)
+app.disable('x-powered-by')
+
+// No CSP/frame/CORP headers on purpose: previews and the /embed page are loaded cross-origin by the frontend.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  next()
+})
 
 app.use(cors({ origin: env.FRONTEND_URL }))
 app.use(express.json({ limit: '1mb' }))

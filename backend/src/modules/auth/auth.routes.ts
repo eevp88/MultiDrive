@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
+import { loginLimiter, registerLimiter } from '../../middleware/rate-limit.middleware.js'
 import { hashPassword, verifyPassword } from '../../utils/password.js'
 import { encryptText, hashToken, randomToken } from '../../utils/crypto.js'
 import { signAccessToken } from '../../utils/jwt.js'
@@ -40,7 +41,7 @@ async function verifyCaptcha(token: string | undefined) {
   return Boolean(data.success)
 }
 
-authRouter.post('/register', async (req, res, next) => {
+authRouter.post('/register', registerLimiter, async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body)
     if (!(await verifyCaptcha(body.captchaToken))) return res.status(400).json({ code: 'CAPTCHA_FAILED', message: 'Captcha verification failed.' })
@@ -54,7 +55,7 @@ authRouter.post('/register', async (req, res, next) => {
   }
 })
 
-authRouter.post('/login', async (req, res, next) => {
+authRouter.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body)
     const user = await prisma.user.findUnique({ where: { email: body.email } })
