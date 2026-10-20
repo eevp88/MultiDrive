@@ -39,7 +39,8 @@ export function PhotosPage() {
     const formatter = new Intl.DateTimeFormat(language, { month: 'long', year: 'numeric' })
     const result: Array<{ label: string; items: Array<{ photo: PhotoItem; index: number }> }> = []
     photos.forEach((photo, index) => {
-      const label = formatter.format(new Date(photo.displayDate))
+      const text = formatter.format(new Date(photo.displayDate))
+      const label = text.charAt(0).toUpperCase() + text.slice(1)
       const last = result[result.length - 1]
       if (last?.label === label) last.items.push({ photo, index })
       else result.push({ label, items: [{ photo, index }] })
@@ -56,7 +57,7 @@ export function PhotosPage() {
       ) : null}
       {groups.map((group) => (
         <section key={group.label} className="mt-6">
-          <h2 className="mb-2 text-sm font-bold capitalize text-slate-700">{group.label}</h2>
+          <h2 className="mb-2 text-sm font-bold text-slate-700">{group.label}</h2>
           <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
             {group.items.map(({ photo, index }) => (
               <PhotoThumb key={photo.id} photo={photo} onOpen={() => setOpenIndex(index)} />
