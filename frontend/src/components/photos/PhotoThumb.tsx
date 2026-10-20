@@ -26,6 +26,7 @@ export function PhotoThumb({ photo, onOpen }: { photo: PhotoItem; onOpen: (photo
       ref={ref}
       type="button"
       title={photo.name}
+      data-photo-thumb=""
       onClick={() => onOpen(photo)}
       className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
     >

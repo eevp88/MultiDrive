@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '@/components/drive/PageHeader'
 import { PhotoThumb } from '@/components/photos/PhotoThumb'
 import { PhotoViewer } from '@/components/photos/PhotoViewer'
@@ -8,6 +8,34 @@ import { apiFetch } from '@/lib/api'
 import { useI18n } from '@/i18n/I18nProvider'
 
 const PAGE_SIZE = 60
+
+function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
+  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']
+  if (!keys.includes(event.key)) return
+  const thumbs = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[data-photo-thumb]'))
+  const current = thumbs.indexOf(document.activeElement as HTMLElement)
+  if (current < 0) return
+  event.preventDefault()
+  let target: HTMLElement | undefined
+  if (event.key === 'ArrowLeft') target = thumbs[current - 1]
+  else if (event.key === 'ArrowRight') target = thumbs[current + 1]
+  else {
+    // Up and down: the closest thumbnail in the nearest row above or below, by horizontal position.
+    const from = thumbs[current].getBoundingClientRect()
+    const down = event.key === 'ArrowDown'
+    const others = thumbs
+      .map((node) => ({ node, rect: node.getBoundingClientRect() }))
+      .filter(({ rect }) => (down ? rect.top > from.top + 1 : rect.top < from.top - 1))
+    if (others.length) {
+      const rowTop = down ? Math.min(...others.map(({ rect }) => rect.top)) : Math.max(...others.map(({ rect }) => rect.top))
+      target = others
+        .filter(({ rect }) => Math.abs(rect.top - rowTop) < 1)
+        .sort((a, b) => Math.abs(a.rect.left - from.left) - Math.abs(b.rect.left - from.left))[0]?.node
+    }
+  }
+  target?.focus()
+  target?.scrollIntoView({ block: 'nearest' })
+}
 
 export function PhotosPage() {
   const { t, translateError, language } = useI18n()
@@ -49,7 +77,7 @@ export function PhotosPage() {
   }, [photos, language])
 
   return (
-    <div className="pb-10">
+    <div className="pb-10" onKeyDown={openIndex === null ? moveFocus : undefined}>
       <PageHeader title={t('photos.title')} description={t('photos.subtitle')} />
       {message ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{message}</p> : null}
       {!loading && photos.length === 0 && !message ? (
