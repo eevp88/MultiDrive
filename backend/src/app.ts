@@ -15,6 +15,7 @@ import { apiKeyRouter } from './modules/api-keys/api-key.routes.js'
 import { publicApiRouter } from './modules/public-api/public-api.routes.js'
 import { auditLogRouter } from './modules/audit-logs/audit-log.routes.js'
 import { systemRouter } from './modules/system/system.routes.js'
+import { photosRouter } from './modules/photos/photos.routes.js'
 
 export const app = express()
 // A hop count, not `true`: `true` trusts the client-supplied left end of X-Forwarded-For, so req.ip (rate limits, session IPs) could be spoofed.
@@ -40,6 +41,7 @@ app.use('/connected-accounts', connectedAccountRouter)
 app.use('/storage', storageRouter)
 app.use('/uploads', uploadRouter)
 app.use('/files', fileRouter)
+app.use('/photos', photosRouter)
 app.use('/folders', folderRouter)
 app.use('/invites', inviteRouter)
 app.use('/audit-logs', auditLogRouter)
