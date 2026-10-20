@@ -6,6 +6,7 @@ import {
   FileArchive,
   Gauge,
   History,
+  Image,
   LogOut,
   Menu,
   Moon,
@@ -39,6 +40,7 @@ import type { MessageKey } from '@/i18n/en'
 
 const menu: Array<{ labelKey: MessageKey; icon: typeof FileArchive; href: string; disabled?: boolean }> = [
   { labelKey: 'nav.allFiles', icon: FileArchive, href: '/all-files' },
+  { labelKey: 'nav.photos', icon: Image, href: '/fotos' },
   { labelKey: 'nav.quota', icon: Gauge, href: '/quota' },
   { labelKey: 'nav.shared', icon: Share2, href: '/shared' },
   { labelKey: 'nav.starred', icon: Star, href: '/starred', disabled: true },

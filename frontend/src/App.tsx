@@ -12,6 +12,7 @@ import { RegisterPage } from '@/pages/RegisterPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { SharedPage } from '@/pages/SharedPage'
 import { StarredPage } from '@/pages/StarredPage'
+import { PhotosPage } from '@/pages/PhotosPage'
 import { PublicFilePage } from '@/pages/PublicFilePage'
 import { ApiManagementPage } from '@/pages/ApiManagementPage'
 import { TrashPage } from '@/pages/TrashPage'
@@ -33,6 +34,7 @@ function App() {
         <Route element={<DriveLayout />}>
           <Route index element={<Navigate to="/all-files" replace />} />
           <Route path="all-files" element={<AllFilesPage />} />
+          <Route path="fotos" element={<PhotosPage />} />
           <Route path="quota" element={<QuotaTrackerPage />} />
           <Route path="shared" element={<SharedPage />} />
           <Route path="recent" element={<RecentPage />} />
