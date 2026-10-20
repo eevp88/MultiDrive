@@ -681,6 +681,8 @@ file
 - Google tokens are encrypted in MySQL.
 - Refresh tokens for app sessions are hashed in MySQL.
 - Google auth handoff tokens, public share tokens, and preview tokens are hashed before lookup/use.
+- `POST /auth/login` allows 10 failed attempts per IP every 15 minutes, and `POST /auth/register` 10 requests per IP per hour. Beyond that the API returns `429 RATE_LIMITED`. Counters are in memory, so they reset when the backend restarts.
+- `TRUST_PROXY` (default `1`) is the number of reverse proxies in front of the backend whose `X-Forwarded-For` is trusted; the rate limits and stored session IPs depend on it. Set it to `0` if the backend port is exposed directly, otherwise clients can spoof their IP and dodge the limits. Set it to `2` behind two proxies (for example Cloudflare plus nginx).
 - `backend/.env` is ignored by git.
 - Do not expose `TOKEN_ENCRYPTION_KEY`, `JWT_ACCESS_SECRET`, `RECAPTCHA_SECRET_KEY`, OAuth client secrets, or raw share/preview/handoff tokens.
 
