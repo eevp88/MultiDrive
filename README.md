@@ -136,8 +136,8 @@ Create `backend/.env`:
 DATABASE_URL="mysql://root@localhost:3306/9drive"
 APP_PORT=4000
 FRONTEND_URL="http://localhost:5173"
-JWT_ACCESS_SECRET="change-this-jwt-secret-at-least-32-chars"
-TOKEN_ENCRYPTION_KEY="change-this-encryption-key-32bytes!"
+JWT_ACCESS_SECRET="replace-with-output-of-openssl-rand-base64-48"
+TOKEN_ENCRYPTION_KEY="replace-with-output-of-openssl-rand-base64-48"
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 MAX_UPLOAD_BYTES=5368709120
@@ -152,8 +152,9 @@ GOOGLE_REDIRECT_URI="http://localhost:4000/connected-accounts/google/callback"
 
 Important:
 
-- `JWT_ACCESS_SECRET` should be long and random.
-- `TOKEN_ENCRYPTION_KEY` should be long and random.
+- `JWT_ACCESS_SECRET` should be long and random (at least 32 characters). Generate it with `openssl rand -base64 48`.
+- `TOKEN_ENCRYPTION_KEY` should be long and random (at least 32 characters). Generate it with `openssl rand -base64 48`.
+- The backend refuses to start if either secret still looks like a docs or template placeholder (it starts with `change-this` or `replace-with`).
 - Do not commit `backend/.env`.
 - Google OAuth credentials are used by the seed script, then stored encrypted in the database.
 
