@@ -20,6 +20,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTI
 - Multi-account storage quota summary.
 - Quota tracker page.
 - Manual sync from the Google Drive `9drive` folder back into MySQL.
+- Photos page (`/fotos`): images and videos from all connected accounts, newest first by capture date (EXIF date from Drive, falling back to upload date), grouped by month. Thumbnails come from Drive and are proxied through the backend; S3 files show a placeholder.
 - Virtual folders.
 - File preview, download, rename, move, and delete actions.
 - In-app API documentation with cURL and JavaScript upload examples.

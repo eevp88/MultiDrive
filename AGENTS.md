@@ -126,6 +126,7 @@ Important files:
 - `frontend/src/App.tsx`: route registration.
 - `frontend/src/layouts/DriveLayout.tsx`: protected app shell, sidebar, header search, storage sidebar stats.
 - `frontend/src/pages/AllFilesPage.tsx`: core file/folder UI, uploads, context menus, preview, share/invite modals.
+- `frontend/src/pages/PhotosPage.tsx`: `/fotos` photo gallery (month-grouped grid, `components/photos/**` for thumbnail and viewer).
 - `frontend/src/pages/SharedPage.tsx`: shared links and invites UI.
 - `frontend/src/pages/QuotaTrackerPage.tsx`: connected-account quota UI.
 - `frontend/src/pages/SettingsPage.tsx`: Google account/settings UI.
@@ -193,6 +194,11 @@ Storage:
 - `GET /storage/summary`
 - `GET /storage/breakdown`
 
+Photos:
+- `GET /photos?limit=<1-200>&cursor=<opaque>`: active image and video files of the user, newest first by `COALESCE(taken_at, created_at)` then id. Returns `{ files, nextCursor }`; pass `nextCursor` back as `cursor`. Each file has `displayDate` and `hasThumbnail` (true for Google Drive files). An invalid cursor returns 400 `INVALID_CURSOR`.
+- `GET /files/:id/thumbnail?size=<32-2048>` (default 320): streams a Drive thumbnail for Google Drive files (404 `THUMBNAIL_UNAVAILABLE` otherwise). The Drive link is signed and works without auth, so it is only used server side and never returned. The frontend loads it with `fetch` plus the Bearer token and shows an object URL, since `<img>` cannot send headers and tokens never go in URLs.
+- `files.taken_at` is filled by the Google sync from `imageMediaMetadata.time`; uploads stay null until the next sync.
+
 Folders:
 - `GET /folders?parentId=<id>`
 - `GET /folders?all=1`
@@ -215,6 +221,7 @@ Files:
 - `DELETE /files/:id/share`
 - `POST /files/:id/preview-token`
 - `GET /files/:id/view-url`
+- `GET /files/:id/thumbnail?size=<32-2048>`
 - `GET /files/:id/download`
 - `DELETE /files/:id`
 - `GET /files/preview/:token`
