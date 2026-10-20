@@ -147,6 +147,10 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
     const uploadOne = async (fieldName: string, fileStream: NodeJS.ReadableStream, info: { filename: string; mimeType: string }) => {
       const meta = metaForFile(fieldName, info)
       const fileName = meta?.fileName || info.filename
+      // Registered before any await: a client that disconnects mid-upload makes the stream emit 'error' while we are still
+      // querying the database, and an 'error' event with no listener would crash the whole process.
+      const streamState: { error?: Error } = {}
+      fileStream.on('error', (error: Error) => { streamState.error = error })
       try {
         fileStream.on('limit', () => logUpload('file stream size limit reached', { fileName }))
         if (!meta?.sizeBytes || meta.sizeBytes <= 0n) {
@@ -184,6 +188,7 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
           chunks.push(chunk)
         })
         await new Promise<void>((resolve, reject) => {
+          if (streamState.error) return reject(streamState.error)
           fileStream.on('end', resolve)
           fileStream.on('error', reject)
         })
