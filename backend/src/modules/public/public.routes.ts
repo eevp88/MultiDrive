@@ -8,7 +8,7 @@ export const publicRouter = Router()
 
 async function findSharedFile(token: string) {
   const share = await prisma.fileShare.findFirst({
-    where: { enabled: true, AND: [{ OR: [{ token }, { tokenHash: hashToken(token) }] }, { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }] },
+    where: { enabled: true, AND: [{ tokenHash: hashToken(token) }, { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }] },
     include: { file: { include: { connectedAccount: true } } },
   })
   if (!share || share.file.status !== 'active') throw new HttpError(404, 'SHARE_NOT_FOUND', 'Shared file not found')

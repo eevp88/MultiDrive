@@ -5,6 +5,7 @@ import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
 import { hashToken, randomToken } from '../../utils/crypto.js'
+import { openShareToken, sealShareToken } from '../../utils/share-token.js'
 import { getAuthedGoogleClient, syncGoogleAppFolderFiles, syncGoogleQuota } from '../google/google.service.js'
 import { deleteS3Object, syncS3Quota, createS3Client, getS3ConfigForAccount } from '../s3/s3.service.js'
 import { streamProviderFile } from './stream-file.js'
@@ -218,18 +219,19 @@ fileRouter.get('/shared-links', async (req: AuthRequest, res, next) => {
       include: { file: { include: { connectedAccount: { select: { email: true, provider: true } }, folder: { select: { id: true, name: true } } } } },
       orderBy: { createdAt: 'desc' },
     })
-    return res.json({
-      shares: shares.filter((share) => share.file.status === 'active').map((share) => {
-        const url = share.token ? `${env.FRONTEND_URL}/public/files/${share.token}` : null
-        return {
-          id: share.id,
-          url,
-          createdAt: share.createdAt.toISOString(),
-          expiresAt: share.expiresAt?.toISOString() ?? null,
-          file: { ...share.file, sizeBytes: share.file.sizeBytes.toString() },
-        }
-      })
+    const items = shares.filter((share) => share.file.status === 'active').map((share) => {
+      const token = openShareToken(share.token)
+      const url = token ? `${env.FRONTEND_URL}/public/files/${token}` : null
+      return {
+        id: share.id,
+        url,
+        createdAt: share.createdAt.toISOString(),
+        expiresAt: share.expiresAt?.toISOString() ?? null,
+        file: { ...share.file, sizeBytes: share.file.sizeBytes.toString() },
+      }
     })
+    // A share whose link cannot be rebuilt stays enabled (its old link keeps working) but is hidden once the same file has a readable one.
+    return res.json({ shares: items.filter((item) => item.url || !items.some((other) => other.url && other.file.id === item.file.id)) })
   } catch (error) {
     return next(error)
   }
@@ -288,14 +290,17 @@ fileRouter.post('/:id/share', async (req: AuthRequest, res, next) => {
     const existingShare = await prisma.fileShare.findFirst({ where: { fileId: file.id, userId: req.user!.id, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' } })
 
     let shareId = existingShare?.id
-    let token = existingShare?.token
-    if (!existingShare) {
+    let token = existingShare ? openShareToken(existingShare.token) : null
+    const reused = Boolean(token)
+    if (!token) {
+      // No share yet, or one whose link cannot be rebuilt (created before tokens were kept, or the encryption key changed).
+      // A new share is added instead of rotating it, so links already handed out keep working.
       token = randomToken(32)
-      const share = await prisma.fileShare.create({ data: { fileId: file.id, userId: req.user!.id, token, tokenHash: hashToken(token) } })
+      const share = await prisma.fileShare.create({ data: { fileId: file.id, userId: req.user!.id, token: sealShareToken(token), tokenHash: hashToken(token) } })
       shareId = share.id
     }
 
-    return res.status(existingShare ? 200 : 201).json({ url: `${env.FRONTEND_URL}/public/files/${token}`, shareId })
+    return res.status(reused ? 200 : 201).json({ url: `${env.FRONTEND_URL}/public/files/${token}`, shareId })
   } catch (error) {
     return next(error)
   }
