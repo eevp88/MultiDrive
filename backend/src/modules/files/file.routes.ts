@@ -7,6 +7,7 @@ import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.
 import { hashToken, randomToken } from '../../utils/crypto.js'
 import { openShareToken, sealShareToken } from '../../utils/share-token.js'
 import { HttpError, clientMessage, describeError } from '../../utils/http-error.js'
+import { thumbnailHandler } from '../photos/thumbnail.js'
 import { getAuthedGoogleClient, syncGoogleAppFolderFiles, syncGoogleQuota } from '../google/google.service.js'
 import { deleteS3Object, syncS3Quota, createS3Client, getS3ConfigForAccount } from '../s3/s3.service.js'
 import { streamProviderFile } from './stream-file.js'
@@ -354,6 +355,8 @@ fileRouter.post('/:id/preview-token', async (req: AuthRequest, res, next) => {
     return next(error)
   }
 })
+
+fileRouter.get('/:id/thumbnail', thumbnailHandler)
 
 fileRouter.get('/:id/view-url', async (req: AuthRequest, res, next) => {
   try {
