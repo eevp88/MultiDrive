@@ -15,6 +15,7 @@ import { defaultFolderColor, defaultFolderIconUrl, folderColorOptions, folderIco
 import { PageHeader } from '@/components/drive/PageHeader'
 import { Input } from '@/components/ui/input'
 import { API_URL, apiFetch, formatBytes, formatDate } from '@/lib/api'
+import { providerName } from '@/lib/providers'
 import { useI18n } from '@/i18n/I18nProvider'
 import { getAccessToken } from '@/lib/auth'
 import { createPlyr, ensurePlyr } from '@/lib/plyr'
@@ -51,8 +52,7 @@ function mimeToKind(mimeType: string): FileItem['kind'] {
 }
 
 function providerLabel(provider: string | undefined) {
-  if (provider === 's3') return 'S3 Storage'
-  return 'Google Drive'
+  return providerName(provider)
 }
 
 function mapFile(file: BackendFile, language: string): FileItem {
@@ -756,7 +756,7 @@ export function AllFilesPage() {
               <option value="">{t('files.automatic')}</option>
               {connectedAccounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.email || account.displayName || account.id} ({account.provider === 's3' ? 'S3' : 'Google Drive'})
+                  {account.email || account.displayName || account.id} ({account.provider === 's3' ? 'S3' : providerName(account.provider)})
                 </option>
               ))}
             </select>
