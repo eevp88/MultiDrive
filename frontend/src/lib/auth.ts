@@ -6,9 +6,9 @@ export type AuthUser = {
   role?: string
 }
 
-const ACCESS_TOKEN_KEY = '9drive.accessToken'
-const REFRESH_TOKEN_KEY = '9drive.refreshToken'
-const USER_KEY = '9drive.user'
+const ACCESS_TOKEN_KEY = 'multidrive.accessToken'
+const REFRESH_TOKEN_KEY = 'multidrive.refreshToken'
+const USER_KEY = 'multidrive.user'
 
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_TOKEN_KEY)

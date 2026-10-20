@@ -1,6 +1,6 @@
 # MultiDrive
 
-MultiDrive is a storage gateway web app for connecting multiple Google Drive accounts into one virtual storage dashboard. Users can register with email/password or Google, automatically connect their first Google Drive account during Google sign-in, track quota, upload files into a dedicated `9drive` Drive folder, organize files with virtual folders, preview files, sync MySQL from Google Drive, and let the backend route uploads to the Drive account with enough free space.
+MultiDrive is a storage gateway web app for connecting multiple Google Drive accounts into one virtual storage dashboard. Users can register with email/password or Google, automatically connect their first Google Drive account during Google sign-in, track quota, upload files into a dedicated `MultiDrive` Drive folder, organize files with virtual folders, preview files, sync MySQL from Google Drive, and let the backend route uploads to the Drive account with enough free space.
 
 ## License
 
@@ -11,7 +11,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTI
 - Google Drive and S3-compatible storage gateway in one virtual storage dashboard.
 - S3-compatible storage support with custom endpoints for providers like MinIO, Cloudflare R2, Wasabi, Backblaze B2, and AWS S3.
 - Direct upload stream to Google Drive. Files are not stored on the server.
-- Google Drive uploads are stored under a root `9drive` folder.
+- Google Drive uploads are stored under a root `MultiDrive` folder.
 - Direct upload stream to S3-compatible storage through the backend without exposing storage credentials to the frontend.
 - Upload routing policies with most-available, round-robin, and priority-order modes.
 - External upload API using API keys at `POST /api/v1/uploads`.
@@ -19,7 +19,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTI
 - Email/password auth plus Google sign-in/register with automatic first Drive connection.
 - Multi-account storage quota summary.
 - Quota tracker page.
-- Manual sync from the Google Drive `9drive` folder back into MySQL.
+- Manual sync from the Google Drive `MultiDrive` folder back into MySQL.
 - Photos page (`/fotos`): images and videos from all connected accounts, newest first by capture date (EXIF date from Drive, falling back to upload date), grouped by month. Thumbnails come from Drive and are proxied through the backend; S3 files show a placeholder.
 - Virtual folders.
 - File preview, download, rename, move, and delete actions.
@@ -63,14 +63,14 @@ password: empty
 The easiest way to prepare the project is using the automated setup script. It generates local environment files with secure keys, installs dependencies, and generates the Prisma client. MySQL 8+ must already be running for local development; Docker setup includes MySQL.
 
 ### Windows (PowerShell)
-Make sure to open PowerShell and navigate to the project directory first. For example, if you cloned the project to `E:\AUTO KLIK\9Drive`:
+Make sure to open PowerShell and navigate to the project directory first. For example, if you cloned the project to `E:\AUTO KLIK\MultiDrive`:
 
 ```powershell
 # 1. Switch to the drive where the project is located (if necessary)
 E:
 
 # 2. Navigate to the project folder
-cd "E:\AUTO KLIK\9Drive"
+cd "E:\AUTO KLIK\MultiDrive"
 
 # 3. Run the automated setup script
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
@@ -260,7 +260,7 @@ https://www.googleapis.com/auth/userinfo.email
 https://www.googleapis.com/auth/userinfo.profile
 ```
 
-Full Drive access is required so Google sign-in can connect the first Drive account automatically and sync files manually added to the `9drive` folder.
+Full Drive access is required so Google sign-in can connect the first Drive account automatically and sync files manually added to the `MultiDrive` folder.
 
 5. If publishing status is `Testing`, add test users.
 
@@ -340,7 +340,7 @@ This stores the Google OAuth config as a global encrypted provider config in MyS
 
 Google's console now groups these settings under **Google Auth Platform**: Branding, Audience (test users and publishing status), Clients and Data Access (scopes).
 
-While the consent screen is `Testing` with external users, Google **revokes refresh tokens after 7 days** whenever a scope beyond name, email and profile is requested, and 9Drive requests `drive`. A connected account then stops renewing its access token and has to be reconnected every week.
+While the consent screen is `Testing` with external users, Google **revokes refresh tokens after 7 days** whenever a scope beyond name, email and profile is requested, and MultiDrive requests `drive`. A connected account then stops renewing its access token and has to be reconnected every week.
 
 To avoid it, set the publishing status to `In production` (Google Auth Platform, Audience, Publish app) and reconnect each account, so the new token is issued without the 7 day limit. It is not verified whether tokens issued during `Testing` keep the limit after publishing, which is why reconnecting is recommended. An unverified production app still shows Google's "app not verified" warning and is limited to 100 users. That does not matter for your own accounts; verification is only needed for wider use.
 
@@ -531,7 +531,7 @@ docker compose down -v
 
 ### VPS Deployment (Step-by-Step)
 
-Follow these steps to deploy 9Drive to a VPS (such as Ubuntu/Debian) using Docker:
+Follow these steps to deploy MultiDrive to a VPS (such as Ubuntu/Debian) using Docker:
 
 #### 1. Install Docker & Docker Compose on your VPS
 ```bash
@@ -542,8 +542,8 @@ sudo systemctl enable --now docker
 
 #### 2. Clone the Repository
 ```bash
-git clone https://github.com/your-github-username/9drive.git
-cd 9drive
+git clone https://github.com/your-github-username/MultiDrive.git
+cd MultiDrive
 ```
 
 #### 3. Setup the Production Environment
@@ -552,8 +552,8 @@ Copy the example environment file to `.env`:
 cp .env.docker.example .env
 ```
 Edit the `.env` file (e.g., `nano .env`) and configure the values for your production VPS domain/IP:
-* **`FRONTEND_URL`**: Set to your public domain or VPS IP (e.g., `http://103.xxx.xxx.xxx:5173` or `https://9drive.yourdomain.com`).
-* **`VITE_API_URL`**: Set to your public backend URL (e.g., `http://103.xxx.xxx.xxx:4000` or `https://api.9drive.yourdomain.com`).
+* **`FRONTEND_URL`**: Set to your public domain or VPS IP (e.g., `http://103.xxx.xxx.xxx:5173` or `https://multidrive.yourdomain.com`).
+* **`VITE_API_URL`**: Set to your public backend URL (e.g., `http://103.xxx.xxx.xxx:4000` or `https://api.multidrive.yourdomain.com`).
 * **`GOOGLE_REDIRECT_URI`**: Set to your public redirect callback URL (e.g., `http://103.xxx.xxx.xxx:4000/connected-accounts/google/callback`).
 * Set secure credentials for **`JWT_ACCESS_SECRET`** and **`TOKEN_ENCRYPTION_KEY`** (encryption key must be exactly 32 characters/bytes).
 * Add your **`GOOGLE_CLIENT_ID`** and **`GOOGLE_CLIENT_SECRET`**.
@@ -573,8 +573,8 @@ docker compose exec backend npm run seed:google-config
 #### 6. Add Authorized URIs in Google Cloud Console
 1. Go to **APIs & Services** -> **Credentials** in the Google Cloud Console.
 2. Edit your OAuth 2.0 Web Client.
-3. In **Authorized JavaScript origins**, add your frontend URL (e.g., `http://your-vps-ip:5173` or `https://9drive.yourdomain.com`).
-4. In **Authorized redirect URIs**, add your redirect URI (e.g., `http://your-vps-ip:4000/connected-accounts/google/callback` or `https://api.9drive.yourdomain.com/connected-accounts/google/callback`).
+3. In **Authorized JavaScript origins**, add your frontend URL (e.g., `http://your-vps-ip:5173` or `https://multidrive.yourdomain.com`).
+4. In **Authorized redirect URIs**, add your redirect URI (e.g., `http://your-vps-ip:4000/connected-accounts/google/callback` or `https://api.multidrive.yourdomain.com/connected-accounts/google/callback`).
 5. Save changes.
 
 ### Non-Docker Production Startup
@@ -611,8 +611,8 @@ http://localhost:5173
 6. Confirm quota appears.
 7. Open `All Files`.
 8. Create nested virtual folders.
-9. Upload a file and confirm it appears under Google Drive root folder `9drive`.
-10. Add or remove a file manually inside Google Drive folder `9drive`, then click `Sync Drive` in All Files.
+9. Upload a file and confirm it appears under Google Drive root folder `MultiDrive`.
+10. Add or remove a file manually inside Google Drive folder `MultiDrive`, then click `Sync Drive` in All Files.
 11. Watch bottom-right upload progress.
 12. Right-click file row for actions:
 
@@ -712,29 +712,37 @@ file
 
 Dropbox, OneDrive, Mega, pCloud, iCloud, Box and any other service. Adding one means writing a new provider: its OAuth or API, chunked upload, quota, sync and delete.
 
-### What 9Drive sees in Google
+### What MultiDrive sees in Google
 
-- Only the Drive folder `9drive` in the root of each connected account, with its subfolders. Run **Sync** in All Files after adding files to it. Nothing else in the Drive is listed.
+- Only the Drive folder `MultiDrive` in the root of each connected account, with its subfolders. Run **Sync** in All Files after adding files to it. Nothing else in the Drive is listed.
 - **Google Photos is not accessible.** It is a separate product from Drive. Since 2025-03-31 its API no longer exposes the existing library to apps: only content the app created, or items the user picks one by one with the Picker. The API has no way to delete photos.
-- The quota shown for an account is the whole Google account, shared by Drive, Gmail and Photos. On a typical personal account most of the usage can be Gmail and Photos, so moving Drive files may free little. The Drive API reports the split (`storageQuota.usageInDrive` against `usage`). 9Drive cannot move files between accounts; it only routes new uploads.
+- The quota shown for an account is the whole Google account, shared by Drive, Gmail and Photos. On a typical personal account most of the usage can be Gmail and Photos, so moving Drive files may free little. The Drive API reports the split (`storageQuota.usageInDrive` against `usage`). MultiDrive cannot move files between accounts; it only routes new uploads.
 
 ### Bringing existing files in
 
-- Put them in the `9drive` Drive folder and sync, or upload them through 9Drive.
-- From Dropbox, OneDrive or a Google Photos export (Takeout): download or copy them, then upload. `rclone` can copy between these services; it has not been tested with 9Drive.
+- Put them in the `MultiDrive` Drive folder and sync, or upload them through MultiDrive.
+- From Dropbox, OneDrive or a Google Photos export (Takeout): download or copy them, then upload. `rclone` can copy between these services; it has not been tested with MultiDrive.
 - Free tiers as of October 2026, which change: Google 15 GB (shared with Gmail and Photos), OneDrive 5 GB, Dropbox 2 GB, Cloudflare R2 10 GB, Backblaze B2 10 GB.
+
+## Upgrading From 9Drive
+
+The project used to be called 9Drive. On upgrade:
+
+- The Drive folder `9drive` is renamed to `MultiDrive` in place the first time each Google account is synced or uploaded to. The folder id does not change, so its files stay where they are.
+- Browser storage keys (session, language, theme) move from the `9drive` prefix to `multidrive` on the first page load, so nobody is signed out.
+- Left as they were on purpose, because changing them would move data: the default MySQL database and user names (`9drive`) and the S3 key prefix of existing S3 accounts (`9drive`).
 
 ## Security Notes
 
 - Backend never stores uploaded files on disk.
-- Uploads are streamed through the backend to Google Drive folder `9drive`.
+- Uploads are streamed through the backend to Google Drive folder `MultiDrive`.
 - Google tokens are encrypted in MySQL.
 - Refresh tokens for app sessions are hashed in MySQL.
 - Google auth handoff tokens, public share tokens, and preview tokens are looked up by hash only.
 - Public share tokens are also stored encrypted (`TOKEN_ENCRYPTION_KEY`) so a share link can be shown again in the UI. A database dump does not contain working links. Rows written by older versions are encrypted automatically the first time the backend starts, or with `npm run encrypt-share-tokens`. If that step fails the backend still starts, the old plain values stay readable, and it is retried on the next start. Rolling back to a version that predates this change after rows were encrypted makes the shared-links list and repeated "share" actions show unusable URLs; links already handed out keep working because lookups use the hash.
 - `POST /auth/login` allows 10 failed attempts per IP every 15 minutes, and `POST /auth/register` 10 requests per IP per hour. Beyond that the API returns `429 RATE_LIMITED`. Counters are in memory, so they reset when the backend restarts.
 - `TRUST_PROXY` (default `1`) is the number of reverse proxies in front of the backend whose `X-Forwarded-For` is trusted; the rate limits and stored session IPs depend on it. Set it to `0` if the backend port is exposed directly, otherwise clients can spoof their IP and dodge the limits. Set it to `2` behind two proxies (for example Cloudflare plus nginx).
-- 9Drive never opens a file in Google Drive on its own. Uploading and "Copy link" leave Drive files private: for a private Google file "Copy link" creates a 9Drive share link, which is read only and can be disabled from the app. The "make public" button on a file is the only thing that opens it in Drive, for anyone with the link and read only. 9Drive cannot take that permission back; remove it in Drive's sharing settings.
+- MultiDrive never opens a file in Google Drive on its own. Uploading and "Copy link" leave Drive files private: for a private Google file "Copy link" creates a MultiDrive share link, which is read only and can be disabled from the app. The "make public" button on a file is the only thing that opens it in Drive, for anyone with the link and read only. MultiDrive cannot take that permission back; remove it in Drive's sharing settings.
 - Versions before this change made every uploaded file, and every file whose link was copied, editable by anyone with its Drive link (`anyone` with `writer`). Those permissions are still there. Review them in Drive and change general access to Restricted for files that should not be public.
 - `backend/.env` is ignored by git.
 - Do not expose `TOKEN_ENCRYPTION_KEY`, `JWT_ACCESS_SECRET`, `RECAPTCHA_SECRET_KEY`, OAuth client secrets, or raw share/preview/handoff tokens.
@@ -755,10 +763,10 @@ The app does not back up or restore its own database. Do it from the host with `
 
 ```bash
 # Backup
-docker compose exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines "$MYSQL_DATABASE"' > 9drive-backup.sql
+docker compose exec -T mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines "$MYSQL_DATABASE"' > multidrive-backup.sql
 
 # Restore into the same (or a fresh) database
-docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < 9drive-backup.sql
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < multidrive-backup.sql
 ```
 
 - The dump holds password hashes and encrypted Google tokens. Store it like a secret.
@@ -777,7 +785,7 @@ The config is automatically encrypted and saved into the database, enabling Goog
 
 ## Automated Updates & PM2 Management
 
-For native VPS setups running with PM2, 9Drive includes a fully automated system update trigger and log monitor in the **Settings** UI.
+For native VPS setups running with PM2, MultiDrive includes a fully automated system update trigger and log monitor in the **Settings** UI.
 
 ### How it works
 1. When you trigger an update from the frontend dashboard, the backend triggers the `update.sh` script in the background.
@@ -785,7 +793,7 @@ For native VPS setups running with PM2, 9Drive includes a fully automated system
    - Resets any local Git conflicts (`git reset --hard`) and pulls the latest changes.
    - Installs dependencies and builds both backend and frontend.
    - Deploys Prisma database migrations.
-   - Restarts the backend process using PM2 (`pm2 restart 9drive-backend`).
+   - Restarts the backend process using PM2 (`pm2 restart multidrive-backend`).
 3. You can monitor the real-time rebuild progress using the log viewer inside the Settings UI.
 
 ### Manual update command
@@ -799,7 +807,7 @@ git reset --hard
 git pull origin main
 cd backend && npm install && npx prisma generate && npm run build && npx prisma migrate deploy
 cd ../frontend && npm install && npm run build
-pm2 restart 9drive-backend
+pm2 restart multidrive-backend
 ```
 
 ## Build

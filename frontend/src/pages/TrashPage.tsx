@@ -76,7 +76,7 @@ export function TrashPage() {
       })
       setMessage(t('trash.restored', { count: ids.length }))
       setMessageType('success')
-      window.dispatchEvent(new Event('9drive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
     } catch (error) {
       setMessage(translateError(error, 'trash.restoreFailed'))
       setMessageType('error')
@@ -103,7 +103,7 @@ export function TrashPage() {
       })
       setMessage(t('trash.deleted', { count: ids.length }))
       setMessageType('success')
-      window.dispatchEvent(new Event('9drive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
     } catch (error) {
       setMessage(translateError(error, 'trash.deleteFailed'))
       setMessageType('error')

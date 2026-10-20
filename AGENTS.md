@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-9Drive is a Google Drive storage gateway. It lets users register/login with email/password or Google, automatically connect the first Drive account during Google sign-in, connect additional Google Drive accounts, track combined quota, upload files through the backend into a dedicated Google Drive `9drive` folder, organize files in virtual folders, preview/download/share files, sync MySQL file records from Google Drive, invite other users to files/folders, and route uploads to a connected Drive account with enough free space.
+MultiDrive is a Google Drive storage gateway. It lets users register/login with email/password or Google, automatically connect the first Drive account during Google sign-in, connect additional Google Drive accounts, track combined quota, upload files through the backend into a dedicated Google Drive `MultiDrive` folder, organize files in virtual folders, preview/download/share files, sync MySQL file records from Google Drive, invite other users to files/folders, and route uploads to a connected Drive account with enough free space.
 
 ## Repository Structure
 
@@ -97,8 +97,8 @@ Security rules:
 - `JWT_ACCESS_SECRET`, `TOKEN_ENCRYPTION_KEY`, `MYSQL_ROOT_PASSWORD` and `MYSQL_PASSWORD` have no defaults, and `env.ts` rejects secrets that start with `change-this` or `replace-with`.
 - `TRUST_PROXY` is a hop count (default 1, use 0 when the backend is exposed directly). Never set `trust proxy` to `true`: it trusts a client controlled header.
 - Login and register are rate limited (`backend/src/middleware/rate-limit.middleware.ts`).
-- Uploaded files must stream through backend to Google Drive folder `9drive`; do not store uploaded files on disk.
-- Never grant Google Drive permissions automatically. Uploads and `GET /files/:id/view-url` leave the file private; `view-url` returns the Drive link only if the file is already public and `url: null` otherwise, so the UI falls back to a 9Drive share link (read only, revocable). Only the explicit `POST /files/:id/public-permission` opens a Drive file, as `anyone` with `reader`. 9Drive has no way to remove a Drive permission, so never use `writer` for `anyone`.
+- Uploaded files must stream through backend to Google Drive folder `MultiDrive`; do not store uploaded files on disk.
+- Never grant Google Drive permissions automatically. Uploads and `GET /files/:id/view-url` leave the file private; `view-url` returns the Drive link only if the file is already public and `url: null` otherwise, so the UI falls back to a MultiDrive share link (read only, revocable). Only the explicit `POST /files/:id/public-permission` opens a Drive file, as `anyone` with `reader`. MultiDrive has no way to remove a Drive permission, so never use `writer` for `anyone`.
 - Keep CORS restricted by `FRONTEND_URL`.
 - Keep auth/token storage behavior centralized; do not change without explicit reason.
 
@@ -242,8 +242,8 @@ Uploads:
 - Current frontend sends metadata first as `filesMeta`: JSON array of `{ fieldName, fileName, mimeType, sizeBytes, folderId? }`.
 - File fields then match `filesMeta[*].fieldName`, e.g. `file-0`, `file-1`.
 - Backend selects a connected Drive account with enough available quota and streams each file directly to Google Drive.
-- Google Drive uploads are placed under the root Drive folder named `9drive`; virtual folders remain app/database-only.
-- `POST /files/sync-google` treats Google Drive folder `9drive` as source of truth for physical files: create missing MySQL file rows, update changed metadata, and mark missing Drive files as deleted.
+- Google Drive uploads are placed under the root Drive folder named `MultiDrive`; virtual folders remain app/database-only.
+- `POST /files/sync-google` treats Google Drive folder `MultiDrive` as source of truth for physical files: create missing MySQL file rows, update changed metadata, and mark missing Drive files as deleted.
 
 ## Docker
 

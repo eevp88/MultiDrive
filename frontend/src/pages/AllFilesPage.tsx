@@ -36,7 +36,7 @@ const sizeActiveClasses: Record<FolderSizeScale, string> = {
 
 type FileViewMode = 'list' | 'grid'
 
-const fileViewStorageKey = '9drive:all-files-view-mode'
+const fileViewStorageKey = 'multidrive:all-files-view-mode'
 
 function getStoredFileViewMode(): FileViewMode {
   const stored = localStorage.getItem(fileViewStorageKey)
@@ -133,7 +133,7 @@ export function AllFilesPage() {
   const [inviting, setInviting] = useState(false)
   const previewVideoRef = useRef<HTMLVideoElement | null>(null)
   const [folderSizeScale, setFolderSizeScale] = useState<FolderSizeScale>(() => {
-    const v = localStorage.getItem('9drive:folder-size')
+    const v = localStorage.getItem('multidrive:folder-size')
     return (v === 'xs' || v === 'sm' || v === 'md' || v === 'lg') ? v : 'md'
   })
   const { setHeaderActions } = useDriveLayoutActions()
@@ -142,7 +142,7 @@ export function AllFilesPage() {
 
   function changeFolderSize(scale: FolderSizeScale) {
     setFolderSizeScale(scale)
-    localStorage.setItem('9drive:folder-size', scale)
+    localStorage.setItem('multidrive:folder-size', scale)
   }
 
   async function loadFiles() {
@@ -245,10 +245,10 @@ export function AllFilesPage() {
     }
 
     window.addEventListener('keydown', onKey)
-    window.addEventListener('9drive:open-move-modal', onOpenMoveShortcut)
+    window.addEventListener('multidrive:open-move-modal', onOpenMoveShortcut)
     return () => {
       window.removeEventListener('keydown', onKey)
-      window.removeEventListener('9drive:open-move-modal', onOpenMoveShortcut)
+      window.removeEventListener('multidrive:open-move-modal', onOpenMoveShortcut)
     }
   }, [activeFolderForMenu, cutFolder, activeFolderId])
 
@@ -319,7 +319,7 @@ export function AllFilesPage() {
 
       setMessage(t('files.syncDone', { created, updated, deleted, accounts }))
       await loadAll()
-      window.dispatchEvent(new Event('9drive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
     } catch (error) {
       setMessage(translateError(error, 'files.failedSync'))
     } finally {
@@ -456,7 +456,7 @@ export function AllFilesPage() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = '9drive-download.zip'
+      link.download = 'multidrive-download.zip'
       link.click()
       URL.revokeObjectURL(url)
       clearSelection()
@@ -497,7 +497,7 @@ export function AllFilesPage() {
     setDeleteOpen(false)
     clearSelection()
     await loadFiles()
-    window.dispatchEvent(new Event('9drive:storage-changed'))
+    window.dispatchEvent(new Event('multidrive:storage-changed'))
   }
 
   async function shareFile() {
@@ -570,7 +570,7 @@ export function AllFilesPage() {
       setInviteEmail('')
       setInviteRole('viewer')
       setInviteMessage(t('files.inviteSaved'))
-      window.dispatchEvent(new Event('9drive:invites-changed'))
+      window.dispatchEvent(new Event('multidrive:invites-changed'))
     } catch (error) {
       setInviteMessage(translateError(error, 'files.failedInvite'))
     } finally {
@@ -625,8 +625,8 @@ export function AllFilesPage() {
     function handleUploadCompleted() {
       loadAll().catch(() => undefined)
     }
-    window.addEventListener('9drive:upload-completed', handleUploadCompleted)
-    return () => window.removeEventListener('9drive:upload-completed', handleUploadCompleted)
+    window.addEventListener('multidrive:upload-completed', handleUploadCompleted)
+    return () => window.removeEventListener('multidrive:upload-completed', handleUploadCompleted)
   }, [activeFolderId])
 
   useEffect(() => {

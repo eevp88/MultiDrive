@@ -319,7 +319,7 @@ fileRouter.post('/:id/public-permission', requireAuth, async (req: AuthRequest, 
     const auth = await getAuthedGoogleClient(file.connectedAccount)
     const drive = google.drive({ version: 'v3', auth })
     // The only place that opens a Drive file to the world, and only when the user asks for it. Read only: anyone with the
-    // link can view and download it, nobody can change it. 9Drive cannot take this permission back, so it stays opt in.
+    // link can view and download it, nobody can change it. MultiDrive cannot take this permission back, so it stays opt in.
     await drive.permissions.create({
       fileId: file.providerFileId,
       requestBody: {
@@ -369,8 +369,8 @@ fileRouter.get('/:id/view-url', async (req: AuthRequest, res, next) => {
     const drive = google.drive({ version: 'v3', auth })
 
     // Never opens the file: a Drive link that others cannot open is useless, and a Drive permission cannot be revoked from
-    // 9Drive. The Drive link is returned only when the file is already public; otherwise `url` is null and the UI falls back to
-    // a 9Drive share link, which is read only and can be disabled.
+    // MultiDrive. The Drive link is returned only when the file is already public; otherwise `url` is null and the UI falls back to
+    // a MultiDrive share link, which is read only and can be disabled.
     const metadata = await drive.files.get({ fileId: file.providerFileId, fields: 'webViewLink,webContentLink,permissions(type)' })
     const isPublic = metadata.data.permissions?.some((permission) => permission.type === 'anyone') ?? false
     return res.json({ url: isPublic ? (metadata.data.webViewLink ?? metadata.data.webContentLink) : null })
@@ -411,7 +411,7 @@ fileRouter.post('/batch-download', async (req: AuthRequest, res, next) => {
     if (files.length === 0) return res.status(404).json({ code: 'FILES_NOT_FOUND', message: 'No files found.' })
 
     res.setHeader('Content-Type', 'application/zip')
-    res.setHeader('Content-Disposition', 'attachment; filename="9drive-download.zip"')
+    res.setHeader('Content-Disposition', 'attachment; filename="multidrive-download.zip"')
 
     const archive = new ZipArchive({ zlib: { level: 9 } })
     archive.on('error', (err: any) => {

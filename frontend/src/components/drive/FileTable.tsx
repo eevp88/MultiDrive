@@ -126,7 +126,7 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
                         title={t('table.moveFile')}
                         onClick={(event) => {
                           event.stopPropagation()
-                          window.dispatchEvent(new CustomEvent('9drive:open-move-modal', { detail: file }))
+                          window.dispatchEvent(new CustomEvent('multidrive:open-move-modal', { detail: file }))
                         }}
                         className="inline-flex h-7 px-2 items-center justify-center rounded-lg text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
                       >

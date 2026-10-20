@@ -5,7 +5,7 @@ import { es } from './es'
 
 export type Language = 'en' | 'es'
 
-const STORAGE_KEY = '9drive.language'
+const STORAGE_KEY = 'multidrive.language'
 const dictionaries: Record<Language, Messages> = { en, es }
 
 type Variables = Record<string, string | number>

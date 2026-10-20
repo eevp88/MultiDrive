@@ -6,7 +6,9 @@ import { HttpError } from '../../utils/http-error.js'
 import { parseExifTime } from '../../utils/exif-time.js'
 
 const googleDriveFolderMimeType = 'application/vnd.google-apps.folder'
-const appFolderName = '9drive'
+const appFolderName = 'MultiDrive'
+// The app used to be called 9Drive and kept its files in a Drive folder with that name.
+const legacyAppFolderName = '9drive'
 
 export function createOAuthClient(config: ProviderConfig) {
   return new google.auth.OAuth2(decryptText(config.clientIdEncrypted), decryptText(config.clientSecretEncrypted), config.redirectUri)
@@ -76,14 +78,23 @@ function escapeDriveQueryValue(value: string) {
 export async function ensureGoogleAppFolder(account: ConnectedAccount) {
   const auth = await getAuthedGoogleClient(account)
   const drive = google.drive({ version: 'v3', auth })
-  const queryName = escapeDriveQueryValue(appFolderName)
-  const existing = await drive.files.list({
-    q: `name = '${queryName}' and mimeType = '${googleDriveFolderMimeType}' and 'root' in parents and trashed = false`,
+  const findFolder = async (name: string) => (await drive.files.list({
+    q: `name = '${escapeDriveQueryValue(name)}' and mimeType = '${googleDriveFolderMimeType}' and 'root' in parents and trashed = false`,
     spaces: 'drive',
     fields: 'files(id,name)',
     pageSize: 1,
-  })
-  const folderId = existing.data.files?.[0]?.id ?? (await drive.files.create({
+  })).data.files?.[0]?.id
+
+  let folderId = await findFolder(appFolderName)
+  if (!folderId) {
+    // Rename the old folder in place: the id stays the same, so its files keep their parent and the sync loses nothing.
+    const legacyId = await findFolder(legacyAppFolderName)
+    if (legacyId) {
+      await drive.files.update({ fileId: legacyId, requestBody: { name: appFolderName }, fields: 'id' })
+      folderId = legacyId
+    }
+  }
+  folderId ??= (await drive.files.create({
     requestBody: { name: appFolderName, mimeType: googleDriveFolderMimeType, parents: ['root'] },
     fields: 'id',
   })).data.id

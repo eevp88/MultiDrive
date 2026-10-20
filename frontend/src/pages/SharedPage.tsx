@@ -42,8 +42,8 @@ export function SharedPage() {
 
   useEffect(() => {
     loadInvites().catch((error) => setMessage(translateError(error, 'shared.loadFailed')))
-    window.addEventListener('9drive:invites-changed', loadInvites)
-    return () => window.removeEventListener('9drive:invites-changed', loadInvites)
+    window.addEventListener('multidrive:invites-changed', loadInvites)
+    return () => window.removeEventListener('multidrive:invites-changed', loadInvites)
   }, [])
 
   async function revokeInvite(id: string) {

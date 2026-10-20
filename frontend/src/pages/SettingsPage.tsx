@@ -200,7 +200,7 @@ export function SettingsPage() {
       if (event.origin !== window.location.origin || event.data?.type !== 'GOOGLE_CONNECTED') return
       setMessage(event.data.status === 'success' ? t('settings.driveConnected') : t('settings.driveConnectFailed'))
       load().then(() => {
-        window.dispatchEvent(new Event('9drive:storage-changed'))
+        window.dispatchEvent(new Event('multidrive:storage-changed'))
       }).catch(() => undefined)
     }
     window.addEventListener('message', onMessage)
@@ -234,7 +234,7 @@ export function SettingsPage() {
     try {
       await apiFetch(`/connected-accounts/${accountId}/sync-quota`, { method: 'POST' })
       await load()
-      window.dispatchEvent(new Event('9drive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
     } finally {
       setSyncingAccountId(null)
     }
@@ -249,7 +249,7 @@ export function SettingsPage() {
       setAccountToDisconnect(null)
       setMessage(t('settings.disconnected'))
       await load()
-      window.dispatchEvent(new Event('9drive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
     } catch (error) {
       setMessage(translateError(error, 'settings.disconnectFailed'))
     } finally {
@@ -267,7 +267,7 @@ export function SettingsPage() {
       setS3Form({ name: '', bucket: '', region: 'us-east-1', endpoint: '', accessKeyId: '', secretAccessKey: '', forcePathStyle: false, quotaBytes: '' })
       setMessage(t('settings.s3Connected'))
       await load()
-      window.dispatchEvent(new Event('9drive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
     } catch (error) {
       setMessage(translateError(error, 'settings.s3ConnectFailed'))
     } finally {
