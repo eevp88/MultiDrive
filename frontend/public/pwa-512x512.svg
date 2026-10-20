@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MultiDrive">
+  <defs><filter id="shadow" x="-25%" y="-30%" width="150%" height="190%"><feDropShadow dx="0" dy="20" stdDeviation="13" flood-color="#050d2e" flood-opacity=".85"/></filter></defs>
   <rect width="512" height="512" rx="112" fill="#2563eb"/>
-  <path fill="#fff" d="M256 75c74 0 133 56 133 125 0 99-90 172-223 239-18 9-38-11-28-30l58-110c-48-21-74-58-74-99 0-69 60-125 134-125Zm0 67c-35 0-62 25-62 58s27 58 62 58 62-25 62-58-27-58-62-58Z"/>
-  <path fill="#bfdbfe" d="M308 318c-21 12-46 24-76 39l-20 37c70-37 123-76 154-120-15 15-35 28-58 44Z"/>
+  <g filter="url(#shadow)"><path transform="translate(256 256) rotate(-20) skewX(-16) translate(-256 -256)" fill="none" stroke="#fff" stroke-width="59" stroke-linecap="round" stroke-linejoin="round" d="M128 371.2V140.8L256 281.6L384 140.8V371.2"/></g>
 </svg>
