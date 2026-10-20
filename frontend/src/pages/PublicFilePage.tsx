@@ -55,9 +55,9 @@ export function PublicFilePage({ embed = false }: { embed?: boolean }) {
   }, [token])
 
   useEffect(() => {
-    document.title = file ? `${file.name} | 9Drive` : `${t('public.pageTitle')} | 9Drive`
+    document.title = file ? `${file.name} | MultiDrive` : `${t('public.pageTitle')} | MultiDrive`
     return () => {
-      document.title = '9Drive'
+      document.title = 'MultiDrive'
     }
   }, [file, t])
 

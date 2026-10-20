@@ -146,8 +146,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     }
 
     // Dispatch global events so active pages reload their data
-    window.dispatchEvent(new Event('9drive:storage-changed'))
-    window.dispatchEvent(new Event('9drive:upload-completed'))
+    window.dispatchEvent(new Event('multidrive:storage-changed'))
+    window.dispatchEvent(new Event('multidrive:upload-completed'))
   }
 
   async function retryFailedUpload(fileName: string) {
@@ -182,8 +182,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         })
       }, session.sessionId, session.targetAccountId)
 
-      window.dispatchEvent(new Event('9drive:storage-changed'))
-      window.dispatchEvent(new Event('9drive:upload-completed'))
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:upload-completed'))
     } catch (err) {
       console.error('Retry upload failed:', fileName, err)
       setUploadProgress((current) => {
