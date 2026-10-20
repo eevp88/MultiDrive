@@ -73,7 +73,7 @@ photosRouter.get('/', async (req: AuthRequest, res, next) => {
         takenAt: row.takenAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
         displayDate: row.displayDate.toISOString(),
-        hasThumbnail: row.provider === 'google_drive',
+        hasThumbnail: row.provider === 'google_drive' || row.provider === 'onedrive',
       })),
       nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null,
     })

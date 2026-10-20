@@ -282,3 +282,18 @@ export async function renameMicrosoftItem(account: ConnectedAccount, itemId: str
   })
   return item.name
 }
+
+// Thumbnail of an item, scaled to fit inside a size x size box. Graph redirects to a pre-authenticated URL that only this
+// server follows. Returns null when the item has no thumbnail (not an image, still being processed, or gone).
+export async function fetchMicrosoftThumbnail(account: ConnectedAccount, itemId: string, size: number) {
+  const accessToken = await getMicrosoftAccessToken(account)
+  const base = `/me/drive/items/${encodeURIComponent(itemId)}/thumbnails/0`
+  for (const variant of [`c${size}x${size}`, 'large']) {
+    try {
+      return await graphFetch(accessToken, `${base}/${variant}/content`, { signal: AbortSignal.timeout(15_000) })
+    } catch (error) {
+      if (!(error instanceof GraphError) || ![400, 404].includes(error.status)) throw error
+    }
+  }
+  return null
+}
