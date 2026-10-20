@@ -77,6 +77,10 @@ Backend conventions:
 - Use Prisma from `backend/src/config/prisma.ts`.
 - Return JSON errors with stable `code` and human-readable `message`.
 - Pass unexpected errors to `next(error)`.
+- Never put a raw `error.message` in a response: it can carry file paths, query arguments or provider response bodies. Throw `HttpError` (`backend/src/utils/http-error.ts`) for messages meant for the client. The global handler maps Zod errors to 400, Prisma not found and unique violations to 404 and 409, body-parser errors to 400 and 413, and everything else to a generic 500.
+- Routes that build their own error responses (batch results, `failed[]`) use `clientMessage(error, fallback)` and log with `describeError(error)`.
+- Every new error `code` the UI can show needs an `error.<CODE>` entry in `frontend/src/i18n/en.ts` and `es.ts`.
+- In upload handlers register stream `error` listeners before any `await`: an unhandled stream error exits the whole process.
 - Convert `bigint` values to strings before sending JSON responses.
 - Keep Google-specific OAuth/Drive behavior in provider modules/services when possible.
 - Keep public-token routes outside `requireAuth`; verify token hash, status, and expiry before streaming/returning data.
@@ -89,6 +93,10 @@ Security rules:
 - Google tokens are encrypted before database storage.
 - App refresh tokens are hashed before database storage.
 - Auth handoff, share, and preview tokens are stored as hashes where applicable.
+- Public share tokens are looked up by `tokenHash` only. The raw token, kept so a link can be shown again, is stored encrypted (`backend/src/utils/share-token.ts`).
+- `JWT_ACCESS_SECRET`, `TOKEN_ENCRYPTION_KEY`, `MYSQL_ROOT_PASSWORD` and `MYSQL_PASSWORD` have no defaults, and `env.ts` rejects secrets that start with `change-this` or `replace-with`.
+- `TRUST_PROXY` is a hop count (default 1, use 0 when the backend is exposed directly). Never set `trust proxy` to `true`: it trusts a client controlled header.
+- Login and register are rate limited (`backend/src/middleware/rate-limit.middleware.ts`).
 - Uploaded files must stream through backend to Google Drive folder `9drive`; do not store uploaded files on disk.
 - Keep CORS restricted by `FRONTEND_URL`.
 - Keep auth/token storage behavior centralized; do not change without explicit reason.

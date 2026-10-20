@@ -335,6 +335,16 @@ npm run seed:google-config
 
 This stores the Google OAuth config as a global encrypted provider config in MySQL. Google sign-in uses the same config and automatically connects the first Drive account. Logged-in users can still click `Connect Drive` in Settings to add more Drive accounts.
 
+### 6.6 Publishing Status And Token Expiry
+
+Google's console now groups these settings under **Google Auth Platform**: Branding, Audience (test users and publishing status), Clients and Data Access (scopes).
+
+While the consent screen is `Testing` with external users, Google **revokes refresh tokens after 7 days** whenever a scope beyond name, email and profile is requested, and 9Drive requests `drive`. A connected account then stops renewing its access token and has to be reconnected every week.
+
+To avoid it, set the publishing status to `In production` (Google Auth Platform, Audience, Publish app) and reconnect each account, so the new token is issued without the 7 day limit. It is not verified whether tokens issued during `Testing` keep the limit after publishing, which is why reconnecting is recommended. An unverified production app still shows Google's "app not verified" warning and is limited to 100 users. That does not matter for your own accounts; verification is only needed for wider use.
+
+While in `Testing`, every Google account you connect must be listed as a test user.
+
 ## 7. Run Development Servers
 
 Start backend:
@@ -689,6 +699,29 @@ mimeType
 folderId optional
 file
 ```
+
+## Storage Providers And Limits
+
+### Supported
+
+- **Google Drive**: OAuth, several accounts per user. New uploads go to the connected account with enough free space.
+- **S3-compatible storage**: bucket, region, optional endpoint, access key id, secret access key and "force path style". The UI lists AWS S3, Cloudflare R2, Backblaze B2, Wasabi and MinIO. Not every provider has been tested with this project.
+
+### Not supported
+
+Dropbox, OneDrive, Mega, pCloud, iCloud, Box and any other service. Adding one means writing a new provider: its OAuth or API, chunked upload, quota, sync and delete.
+
+### What 9Drive sees in Google
+
+- Only the Drive folder `9drive` in the root of each connected account, with its subfolders. Run **Sync** in All Files after adding files to it. Nothing else in the Drive is listed.
+- **Google Photos is not accessible.** It is a separate product from Drive. Since 2025-03-31 its API no longer exposes the existing library to apps: only content the app created, or items the user picks one by one with the Picker. The API has no way to delete photos.
+- The quota shown for an account is the whole Google account, shared by Drive, Gmail and Photos. On a typical personal account most of the usage can be Gmail and Photos, so moving Drive files may free little. The Drive API reports the split (`storageQuota.usageInDrive` against `usage`). 9Drive cannot move files between accounts; it only routes new uploads.
+
+### Bringing existing files in
+
+- Put them in the `9drive` Drive folder and sync, or upload them through 9Drive.
+- From Dropbox, OneDrive or a Google Photos export (Takeout): download or copy them, then upload. `rclone` can copy between these services; it has not been tested with 9Drive.
+- Free tiers as of October 2026, which change: Google 15 GB (shared with Gmail and Photos), OneDrive 5 GB, Dropbox 2 GB, Cloudflare R2 10 GB, Backblaze B2 10 GB.
 
 ## Security Notes
 
