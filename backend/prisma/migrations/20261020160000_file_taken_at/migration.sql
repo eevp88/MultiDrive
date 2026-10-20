@@ -1,0 +1,1 @@
+ALTER TABLE `files` ADD COLUMN `taken_at` DATETIME(3) NULL;
