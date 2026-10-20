@@ -17,8 +17,8 @@ Quotes are the user's exact words. Items marked (assumption) come from the assis
 
 ## Tasks
 
-- [ ] T1 | S3 | inline | Prisma migration adding `files.taken_at`; commit: pending
-- [ ] T2 | S3 | inline | Request `imageMediaMetadata(time)` in `syncGoogleAppFolderFiles` and store `takenAt`; commit: pending
+- [x] T1 | S3 | inline | Prisma migration adding `files.taken_at`; commit: 16d7d76 (column `datetime(3)` nullable present in MySQL, `prisma migrate status` up to date with 18 migrations, server healthy)
+- [ ] T2 | S3 | inline | Request `imageMediaMetadata(time)` in `syncGoogleAppFolderFiles` and store `takenAt`; commit: 8f1e4d3 (code done; build, parser tests and the real Drive API check observed; the database write during a real sync is NOT yet observed, pending a sync with images in the `9drive` folder, see L12)
 - [ ] T3 | S2, S7 | inline | `GET /files/:id/thumbnail` proxy with cache headers and no token leakage; commit: pending
 - [ ] T4 | S4 | inline | `GET /photos` with cursor pagination; commit: pending
 - [ ] T5 | S1, S5 | inline | `/fotos` page, sidebar entry, i18n en and es; commit: pending
@@ -49,3 +49,5 @@ Push, pull request creation and merge are the user's decisions.
 - L8 (2026-10-20, decision, assumption): delivery strategy `stacked-to-main` was the assistant's recommendation and the user answered "primero con la galeria" to the question that offered it; it is recorded as assumed, not as an explicit answer, and can be changed.
 - L9 (2026-10-20, evidence): only two providers exist in the code (`google_drive`, `s3`). The user also has files in Dropbox and a personal OneDrive; neither is supported. Free tiers checked: Dropbox 2 GB, OneDrive 5 GB, Cloudflare R2 and Backblaze B2 10 GB. Photos stored in S3 accounts would show a generic icon under option A, which makes the pending A versus B decision (L6) more relevant if the user moves photos to R2 or B2.
 - L10 (2026-10-20, progress): project documentation updated (README sections 6.6 and Storage Providers And Limits, AGENTS.md conventions). Next: T1.
+- L11 (2026-10-20, evidence): real Drive check, read-only, 110 images of the connected account: `imageMediaMetadata.time` is always `YYYY:MM:DD HH:MM:SS` (90 of 90) and `parseExifTime` accepted all of them; PNG files carry no capture date (fallback to `createdAt`); JPEG 27 of 37 and HEIF 63 of 63 carry it. 19 parser cases pass (impossible dates, `0000:00:00`, future dates, non EXIF formats). Risk for T3 and T5: 63 of 110 images are HEIF (iPhone), which browsers do not render in an `<img>`, so the existing preview will not show them; the viewer should use a large Drive thumbnail for those.
+- L12 (2026-10-20, progress): T1 and T2 committed on `feat/photos-taken-at`. The sync write path needs files in the Drive folder `9drive` and a Sync from All Files; that is a user action on the user's Drive, so it is left to the user or to an explicit authorization. Persisting `takenAt` for uploads was left out on purpose: the capture date is not available when the upload finishes, so those rows stay null until the next sync.
