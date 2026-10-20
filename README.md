@@ -430,6 +430,8 @@ GOOGLE_REDIRECT_URI=http://localhost:4000/connected-accounts/google/callback
 
 Captcha is disabled when either `VITE_RECAPTCHA_SITE_KEY` or `RECAPTCHA_SECRET_KEY` is empty.
 
+`JWT_ACCESS_SECRET` and `TOKEN_ENCRYPTION_KEY` are required (minimum 32 characters): `docker compose` refuses to start if either is missing. Generate each with `openssl rand -base64 48`. Changing `TOKEN_ENCRYPTION_KEY` on an existing install makes the stored Google tokens undecryptable, so accounts must be reconnected.
+
 ### 2. Start Containers
 
 ```bash
