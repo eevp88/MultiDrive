@@ -6,6 +6,7 @@ import { env } from '../../config/env.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
 import { hashToken, randomToken } from '../../utils/crypto.js'
 import { openShareToken, sealShareToken } from '../../utils/share-token.js'
+import { HttpError, clientMessage, describeError } from '../../utils/http-error.js'
 import { getAuthedGoogleClient, syncGoogleAppFolderFiles, syncGoogleQuota } from '../google/google.service.js'
 import { deleteS3Object, syncS3Quota, createS3Client, getS3ConfigForAccount } from '../s3/s3.service.js'
 import { streamProviderFile } from './stream-file.js'
@@ -184,7 +185,8 @@ fileRouter.delete('/batch/permanent', async (req: AuthRequest, res, next) => {
         syncedAccountIds.add(file.connectedAccountId)
         await createAuditLog(req.user!.id, 'PERMANENT_DELETE_FILE', 'file', file.id, { name: file.name })
       } catch (error) {
-        failed.push({ fileId: file.id, message: error instanceof Error ? error.message : 'Delete failed' })
+        console.error('Failed to delete file', file.id, describeError(error))
+        failed.push({ fileId: file.id, message: clientMessage(error, 'Delete failed.') })
       }
     }
 
@@ -325,7 +327,8 @@ fileRouter.post('/:id/public-permission', requireAuth, async (req: AuthRequest, 
     const metadata = await drive.files.get({ fileId: file.providerFileId, fields: 'webViewLink,webContentLink' })
     return res.json({ status: 'ok', url: metadata.data.webViewLink ?? metadata.data.webContentLink })
   } catch (error: any) {
-    return res.status(500).json({ code: 'GOOGLE_API_ERROR', message: error.message || 'Failed to update Google Drive permissions.' })
+    console.error('Failed to update Google Drive permissions:', describeError(error))
+    return res.status(500).json({ code: error instanceof HttpError ? error.code : 'GOOGLE_API_ERROR', message: clientMessage(error, 'Failed to update Google Drive permissions.') })
   }
 })
 

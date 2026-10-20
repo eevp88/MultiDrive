@@ -10,7 +10,7 @@ import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.
 import { ensureGoogleAppFolder, getAuthedGoogleClient, syncGoogleQuota } from '../google/google.service.js'
 import { buildS3ObjectKey, getS3ConfigForAccount, syncS3Quota, uploadS3Object } from '../s3/s3.service.js'
 import { createAuditLog } from '../../utils/audit.js'
-import { HttpError } from '../../utils/http-error.js'
+import { HttpError, clientMessage, describeError } from '../../utils/http-error.js'
 
 export const uploadRouter = Router()
 
@@ -167,7 +167,8 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
         const folderId = meta.folderId || null
         let targetAccountId: string | undefined = undefined
         if (folderId) {
-          const folderRecord = await prisma.folder.findFirstOrThrow({ where: { id: folderId, userId: req.user!.id, deletedAt: null } })
+          const folderRecord = await prisma.folder.findFirst({ where: { id: folderId, userId: req.user!.id, deletedAt: null } })
+          if (!folderRecord) throw new HttpError(404, 'FOLDER_NOT_FOUND', 'Folder not found.')
           if (folderRecord.connectedAccountId) {
             targetAccountId = folderRecord.connectedAccountId
           }
@@ -263,8 +264,9 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
         else syncQuotaInBackground(account.id, session.id)
       } catch (error) {
         fileStream.resume()
-        logUpload('file upload failed', { fileName, message: error instanceof Error ? error.message : 'Upload failed' })
-        failed.push({ fileName, code: 'UPLOAD_FAILED', message: error instanceof Error ? error.message : 'Upload failed' })
+        // The detail stays in the server log; failed[] also becomes the response, so it only carries messages made for the client.
+        logUpload('file upload failed', { fileName, error: describeError(error) })
+        failed.push({ fileName, code: error instanceof HttpError ? error.code : 'UPLOAD_FAILED', message: clientMessage(error, 'Upload failed.') })
       }
     }
 
