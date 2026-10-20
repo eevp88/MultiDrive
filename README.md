@@ -8,7 +8,7 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTI
 
 ## Features
 
-- Google Drive and S3-compatible storage gateway in one virtual storage dashboard.
+- Google Drive, OneDrive (personal accounts) and S3-compatible storage gateway in one virtual storage dashboard.
 - S3-compatible storage support with custom endpoints for providers like MinIO, Cloudflare R2, Wasabi, Backblaze B2, and AWS S3.
 - Direct upload stream to Google Drive. Files are not stored on the server.
 - Google Drive uploads are stored under a root `MultiDrive` folder.
@@ -439,6 +439,11 @@ RECAPTCHA_SECRET_KEY=
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:4000/connected-accounts/google/callback
+
+# Optional, only for OneDrive. See "OneDrive Setup".
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_REDIRECT_URI=http://localhost:4000/connected-accounts/onedrive/callback
 ```
 
 Captcha is disabled when either `VITE_RECAPTCHA_SITE_KEY` or `RECAPTCHA_SECRET_KEY` is empty.
@@ -701,16 +706,47 @@ folderId optional
 file
 ```
 
+## OneDrive Setup
+
+OneDrive (personal Microsoft accounts: Outlook, Hotmail, Live) works like Google Drive: connect one or more accounts and uploads go to the account with enough free space. MultiDrive keeps its files in a `MultiDrive` folder in the root of each OneDrive; run **Sync** in All Files after adding files to it. Only files directly in that folder are listed, and folders you create in MultiDrive are virtual (they exist only in the database).
+
+It needs an app registration in Microsoft Entra (Azure). It is free and only takes a Microsoft account. The portal screens change from time to time, so treat the names below as a guide.
+
+1. Sign in at <https://entra.microsoft.com> (or the Azure portal) with a Microsoft account and open **App registrations** > **New registration**.
+2. Name it `MultiDrive`. For **Supported account types** choose **Personal Microsoft accounts only**.
+3. Under **Redirect URI** choose the platform **Web** and enter `http://localhost:4000/connected-accounts/onedrive/callback` (use your public backend URL in production and register it here too).
+4. Open the new app. On **Overview**, copy the **Application (client) ID**.
+5. Open **Certificates & secrets** > **New client secret**, and copy the secret **Value** right away: it is shown only once. A secret expires (at most after 24 months); create a new one before that and seed it again.
+6. Open **API permissions** and make sure **Microsoft Graph** has these delegated permissions: `Files.ReadWrite`, `offline_access` and `User.Read`. Personal accounts agree to them on the consent screen when they connect; no administrator approval is needed.
+7. Put the values in the backend environment (`.env` locally, `.env.docker` for Docker):
+
+```env
+MICROSOFT_CLIENT_ID=your-application-client-id
+MICROSOFT_CLIENT_SECRET=the-secret-value
+MICROSOFT_REDIRECT_URI=http://localhost:4000/connected-accounts/onedrive/callback
+```
+
+8. Store them encrypted in MySQL: with Docker restart the backend (`docker compose up -d`), which seeds them at start, or run `docker compose exec backend npm run seed:microsoft-config`. Without Docker run `cd backend && npm run seed:microsoft-config`. If the variables are empty the step is skipped and Google is not affected.
+9. In **Settings** (or **Quota Tracker**) click **Connect OneDrive**, sign in and accept. The account shows up with its quota.
+
+Notes:
+
+- The redirect URI in the app registration must match `MICROSOFT_REDIRECT_URI` exactly, including the scheme and the port.
+- Microsoft rotates the refresh token every time it is used, and MultiDrive stores the new one. A refresh token that is not used for a long time (Microsoft documents 90 days) stops working; the account then asks to be reconnected in Settings.
+- Photos stored in OneDrive show up in `/fotos` with thumbnails and their capture date, like Google Drive photos.
+- Not supported for OneDrive: signing in to MultiDrive with Microsoft, work or school accounts, public Drive links (use a MultiDrive share link), and folders created in OneDrive itself.
+
 ## Storage Providers And Limits
 
 ### Supported
 
 - **Google Drive**: OAuth, several accounts per user. New uploads go to the connected account with enough free space.
+- **OneDrive** (personal Microsoft accounts): OAuth, several accounts per user, thumbnails and capture dates for the photo gallery. Needs a free app registration, see [OneDrive Setup](#onedrive-setup).
 - **S3-compatible storage**: bucket, region, optional endpoint, access key id, secret access key and "force path style". The UI lists AWS S3, Cloudflare R2, Backblaze B2, Wasabi and MinIO. Not every provider has been tested with this project.
 
 ### Not supported
 
-Dropbox, OneDrive, Mega, pCloud, iCloud, Box and any other service. Adding one means writing a new provider: its OAuth or API, chunked upload, quota, sync and delete.
+Dropbox, Mega, pCloud, iCloud, Box and any other service. Adding one means writing a new provider: its OAuth or API, chunked upload, quota, sync and delete.
 
 ### What MultiDrive sees in Google
 
@@ -721,7 +757,8 @@ Dropbox, OneDrive, Mega, pCloud, iCloud, Box and any other service. Adding one m
 ### Bringing existing files in
 
 - Put them in the `MultiDrive` Drive folder and sync, or upload them through MultiDrive.
-- From Dropbox, OneDrive or a Google Photos export (Takeout): download or copy them, then upload. `rclone` can copy between these services; it has not been tested with MultiDrive.
+- From OneDrive: connect the account, put the files in its `MultiDrive` folder and sync.
+- From Dropbox or a Google Photos export (Takeout): download or copy them, then upload. `rclone` can copy between these services; it has not been tested with MultiDrive.
 - Free tiers as of October 2026, which change: Google 15 GB (shared with Gmail and Photos), OneDrive 5 GB, Dropbox 2 GB, Cloudflare R2 10 GB, Backblaze B2 10 GB.
 
 ## Upgrading From 9Drive

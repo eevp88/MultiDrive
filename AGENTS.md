@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MultiDrive is a Google Drive storage gateway. It lets users register/login with email/password or Google, automatically connect the first Drive account during Google sign-in, connect additional Google Drive accounts, track combined quota, upload files through the backend into a dedicated Google Drive `MultiDrive` folder, organize files in virtual folders, preview/download/share files, sync MySQL file records from Google Drive, invite other users to files/folders, and route uploads to a connected Drive account with enough free space.
+MultiDrive is a Google Drive, OneDrive and S3 storage gateway. It lets users register/login with email/password or Google, automatically connect the first Drive account during Google sign-in, connect additional Google Drive accounts, track combined quota, upload files through the backend into a dedicated Google Drive `MultiDrive` folder, organize files in virtual folders, preview/download/share files, sync MySQL file records from Google Drive, invite other users to files/folders, and route uploads to a connected Drive account with enough free space.
 
 ## Repository Structure
 
@@ -44,6 +44,8 @@ Important files:
 - `backend/src/middleware/error.middleware.ts`: JSON error responses.
 - `backend/src/modules/**`: feature route modules and provider services.
 - `backend/src/modules/files/stream-google-file.ts`: Google file preview/download streaming.
+- `backend/src/modules/microsoft/microsoft.service.ts`: OneDrive (Microsoft Graph) tokens with refresh rotation, quota, app folder, sync, upload sessions, content, thumbnails, rename and delete. `microsoft.routes.ts` holds the connect flow. `stream-microsoft-file.ts` streams OneDrive files. Add a new provider the same way: a `modules/<provider>/` service, a branch in each dispatcher below, and `modules/storage/sync-quota.ts`.
+- `backend/src/scripts/seed-microsoft-config.ts`: stores the encrypted Microsoft OAuth app (`npm run seed:microsoft-config`, skipped when the variables are empty).
 - `backend/src/scripts/seed-google-config.ts`: stores encrypted global Google OAuth config.
 
 Commands:
@@ -67,6 +69,7 @@ Environment:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_REDIRECT_URI`
+- `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_REDIRECT_URI` (optional; enable OneDrive, see README "OneDrive Setup")
 
 Backend conventions:
 - Put route logic under `backend/src/modules/<feature>/<feature>.routes.ts`.
@@ -90,7 +93,8 @@ Backend conventions:
 Security rules:
 - Never commit `.env` files or secrets.
 - Never log access tokens, refresh tokens, OAuth client secrets, JWT secrets, encryption keys, or raw public share tokens.
-- Google tokens are encrypted before database storage.
+- Google and Microsoft tokens are encrypted before database storage. Microsoft rotates the refresh token on every refresh, so the new one must be stored each time.
+- A OneDrive upload session URL (`providerSessionUri`) is pre-authenticated: call it without an `Authorization` header and never log or return it.
 - App refresh tokens are hashed before database storage.
 - Auth handoff, share, and preview tokens are stored as hashes where applicable.
 - Public share tokens are looked up by `tokenHash` only. The raw token, kept so a link can be shown again, is stored encrypted (`backend/src/utils/share-token.ts`).
@@ -190,6 +194,12 @@ Google connected accounts:
 - `POST /connected-accounts/:id/sync-quota`
 - `DELETE /connected-accounts/:id`
 
+OneDrive connected accounts (personal Microsoft accounts):
+- `GET /connected-accounts/onedrive/connect-url`
+- `GET /connected-accounts/onedrive/connect`
+- `GET /connected-accounts/onedrive/callback`: every outcome redirects to `/google-connected?status=...&provider=onedrive`.
+- Returns 409 `MICROSOFT_NOT_CONFIGURED` when no active Microsoft config was seeded.
+
 Storage:
 - `GET /storage/summary`
 - `GET /storage/breakdown`
@@ -243,13 +253,15 @@ Uploads:
 - File fields then match `filesMeta[*].fieldName`, e.g. `file-0`, `file-1`.
 - Backend selects a connected Drive account with enough available quota and streams each file directly to Google Drive.
 - Google Drive uploads are placed under the root Drive folder named `MultiDrive`; virtual folders remain app/database-only.
-- `POST /files/sync-google` treats Google Drive folder `MultiDrive` as source of truth for physical files: create missing MySQL file rows, update changed metadata, and mark missing Drive files as deleted.
+- OneDrive accounts take part in the same routing. Files up to 4 MiB use a simple upload; larger ones use a Graph upload session with 10 MiB chunks. Both `POST /uploads` and the resumable endpoints (`/uploads/resumable/init`, `/status/:id`, `/chunk/:id`, which the web UI uses) support OneDrive. A same-name upload is renamed by OneDrive instead of replacing the file. Files live in the OneDrive folder `MultiDrive`; virtual folders stay database-only.
+- `POST /files/sync-google` treats Google Drive folder `MultiDrive` as source of truth for physical files: create missing MySQL file rows, update changed metadata, and mark missing Drive files as deleted. It also syncs OneDrive accounts (same rules, folder `MultiDrive`).
 
 ## Docker
 
 Commands:
 - `docker compose up -d --build`: build and start MySQL, backend, frontend.
 - `docker compose exec backend npm run seed:google-config`: seed Google config inside backend container.
+- `docker compose exec backend npm run seed:microsoft-config`: seed the OneDrive (Microsoft) config.
 - `docker compose logs -f backend`: backend logs.
 - `docker compose logs -f frontend`: frontend logs.
 - `docker compose logs -f mysql`: MySQL logs.
