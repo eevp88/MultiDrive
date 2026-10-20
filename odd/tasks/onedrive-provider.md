@@ -23,7 +23,7 @@ Quotes are the user's exact words. Items marked (assumption) come from the assis
 
 - [x] T1 | S2, S4, S5, S6 | inline | `microsoft.service.ts`: Graph client, token refresh with rotation, quota sync, app folder, file sync; commit: 7f1e230 (14 checks against a mocked Graph, see L4)
 - [x] T2 | S2, S3 | inline | seed script and env vars, connect-url and callback routes, `ProviderConfig` for `onedrive`; commit: 53c4ee5 (observed against the running stack, see L5)
-- [x] T3 | S5, S7 | inline | upload routing and streamed upload through Graph upload sessions; commit: b9e88f4 (21 checks against a mocked Graph, see L6)
+- [x] T3 | S5, S7 | inline | upload routing and streamed upload through Graph upload sessions; commit: b9e88f4 (17 checks against a mocked Graph, see L6)
 - [x] T4 | S7 | inline | download, preview, batch download, rename, move, permanent delete, sync route; commit: b9e88f4 (15 checks against a mocked Graph, see L7)
 - [ ] T5 | S8 | inline | thumbnails, `takenAt`, `hasThumbnail` for `onedrive`; commit: pending
 - [ ] T6 | S9 | inline | frontend connect flow, labels, icons, i18n, quota page; commit: pending
