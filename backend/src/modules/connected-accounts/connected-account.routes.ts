@@ -8,6 +8,7 @@ import { decryptText, encryptText, hashToken, randomToken } from '../../utils/cr
 import { hashPassword } from '../../utils/password.js'
 import { createOAuthClient, syncGoogleQuota } from '../google/google.service.js'
 import { syncS3Quota, testS3Connection } from '../s3/s3.service.js'
+import { syncMicrosoftQuota } from '../microsoft/microsoft.service.js'
 
 export const connectedAccountRouter = Router()
 
@@ -24,6 +25,7 @@ const s3ConnectSchema = z.object({
 
 async function syncQuotaForAccount(account: { id: string; provider: string }) {
   if (account.provider === 's3') return syncS3Quota(account.id)
+  if (account.provider === 'onedrive') return syncMicrosoftQuota(account.id)
   return syncGoogleQuota(account.id)
 }
 
