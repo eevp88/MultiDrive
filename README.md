@@ -432,7 +432,7 @@ GOOGLE_REDIRECT_URI=http://localhost:4000/connected-accounts/google/callback
 
 Captcha is disabled when either `VITE_RECAPTCHA_SITE_KEY` or `RECAPTCHA_SECRET_KEY` is empty.
 
-`JWT_ACCESS_SECRET` and `TOKEN_ENCRYPTION_KEY` are required (minimum 32 characters): `docker compose` refuses to start if either is missing. Generate each with `openssl rand -base64 48`. Changing `TOKEN_ENCRYPTION_KEY` on an existing install makes the stored Google tokens undecryptable, so accounts must be reconnected.
+`JWT_ACCESS_SECRET` and `TOKEN_ENCRYPTION_KEY` are required (minimum 32 characters): `docker compose` refuses to start if either is missing. Generate each with `openssl rand -base64 48`. Changing `TOKEN_ENCRYPTION_KEY` on an existing install makes the stored Google tokens undecryptable, so accounts must be reconnected, and previously created share links can no longer be displayed in the UI (the links themselves keep working for whoever already has them).
 
 `MYSQL_ROOT_PASSWORD` and `MYSQL_PASSWORD` are also required, with no default. Generate them with `openssl rand -hex 24`, not `-base64`: the app password is embedded in `DATABASE_URL`, and `+`, `/` and `=` break it.
 
@@ -696,7 +696,8 @@ file
 - Uploads are streamed through the backend to Google Drive folder `9drive`.
 - Google tokens are encrypted in MySQL.
 - Refresh tokens for app sessions are hashed in MySQL.
-- Google auth handoff tokens, public share tokens, and preview tokens are hashed before lookup/use.
+- Google auth handoff tokens, public share tokens, and preview tokens are looked up by hash only.
+- Public share tokens are also stored encrypted (`TOKEN_ENCRYPTION_KEY`) so a share link can be shown again in the UI. A database dump does not contain working links. Rows written by older versions are encrypted automatically the first time the backend starts, or with `npm run encrypt-share-tokens`. If that step fails the backend still starts, the old plain values stay readable, and it is retried on the next start. Rolling back to a version that predates this change after rows were encrypted makes the shared-links list and repeated "share" actions show unusable URLs; links already handed out keep working because lookups use the hash.
 - `POST /auth/login` allows 10 failed attempts per IP every 15 minutes, and `POST /auth/register` 10 requests per IP per hour. Beyond that the API returns `429 RATE_LIMITED`. Counters are in memory, so they reset when the backend restarts.
 - `TRUST_PROXY` (default `1`) is the number of reverse proxies in front of the backend whose `X-Forwarded-For` is trusted; the rate limits and stored session IPs depend on it. Set it to `0` if the backend port is exposed directly, otherwise clients can spoof their IP and dodge the limits. Set it to `2` behind two proxies (for example Cloudflare plus nginx).
 - `backend/.env` is ignored by git.
@@ -725,7 +726,7 @@ docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQ
 ```
 
 - The dump holds password hashes and encrypted Google tokens. Store it like a secret.
-- Keep `TOKEN_ENCRYPTION_KEY` alongside your backups: without the same key, restored Google tokens cannot be decrypted and accounts must be reconnected.
+- Keep `TOKEN_ENCRYPTION_KEY` alongside your backups: without the same key, restored Google tokens cannot be decrypted (accounts must be reconnected) and existing share links can no longer be displayed.
 - Restoring drops and recreates the tables in the dump, so stop the backend first (`docker compose stop backend`) and start it again afterwards.
 
 ## Google OAuth Configuration via UI
