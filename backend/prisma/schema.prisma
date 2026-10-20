@@ -307,7 +307,8 @@ model UploadSession {
   mimeType                 String            @map("mime_type") @db.VarChar(191)
   sizeBytes                BigInt            @map("size_bytes")
   status                   String            @db.VarChar(32)
-  googleSessionUri         String?           @map("google_session_uri") @db.Text
+  // Resumable upload URL of the target provider (Google Drive session or OneDrive upload session). The column keeps its old name.
+  providerSessionUri       String?           @map("google_session_uri") @db.Text
   errorMessage             String?           @map("error_message") @db.Text
   createdAt                DateTime          @default(now()) @map("created_at")
   completedAt              DateTime?         @map("completed_at")

@@ -17,7 +17,7 @@ const googlePreviewExportMimeTypes: Record<string, { mimeType: string; extension
   'application/vnd.google-apps.spreadsheet': { mimeType: 'application/pdf', extension: '.pdf' },
 }
 
-function contentDisposition(type: 'inline' | 'attachment', fileName: string) {
+export function contentDisposition(type: 'inline' | 'attachment', fileName: string) {
   return `${type}; filename="${fileName.replaceAll('"', '')}"`
 }
 

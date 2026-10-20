@@ -180,3 +180,105 @@ export async function syncMicrosoftAppFolderFiles(accountId: string, userId: str
   await syncMicrosoftQuota(account.id).catch(() => undefined)
   return { accountId: account.id, created, updated, deleted }
 }
+
+// OneDrive rejects these characters and a few reserved names, so file names are cleaned before they are sent.
+export function sanitizeMicrosoftName(name: string) {
+  const cleaned = name.replace(/["*:<>?/\\|]/g, '_').replace(/^\s+/, '').replace(/[. ]+$/, '').slice(0, 255)
+  if (!cleaned) return 'file'
+  return /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(cleaned) ? `_${cleaned}` : cleaned
+}
+
+export type MicrosoftUploadedItem = { id: string; name: string; size?: number; file?: { mimeType?: string } }
+
+const simpleUploadLimit = 4 * 1024 * 1024
+// Graph requires every chunk but the last to be a multiple of 320 KiB; 10 MiB is 32 of them.
+const uploadChunkSize = 10 * 1024 * 1024
+const chunkTimeoutMs = 120_000
+
+// Same name in the same folder: Graph renames the new file instead of replacing the old one.
+const conflictRename = '@microsoft.graph.conflictBehavior'
+
+export async function createMicrosoftUploadSession(accessToken: string, parentId: string, fileName: string) {
+  const session = await graphJson<{ uploadUrl?: string }>(accessToken, `/me/drive/items/${parentId}:/${encodeURIComponent(fileName)}:/createUploadSession`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item: { [conflictRename]: 'rename', name: fileName } }),
+  })
+  if (!session.uploadUrl) throw new HttpError(502, 'MICROSOFT_API_ERROR', 'OneDrive did not return an upload session.')
+  return session.uploadUrl
+}
+
+// The upload URL is pre-authenticated: it must be called without the Authorization header and never logged.
+export async function queryMicrosoftUploadOffset(uploadUrl: string) {
+  const response = await fetch(uploadUrl, { signal: AbortSignal.timeout(requestTimeoutMs) })
+  if (!response.ok) return null
+  const data = await response.json().catch(() => ({})) as { nextExpectedRanges?: string[] }
+  const start = data.nextExpectedRanges?.[0]?.split('-')[0]
+  return start && /^\d+$/.test(start) ? BigInt(start) : 0n
+}
+
+export async function cancelMicrosoftUploadSession(uploadUrl: string) {
+  await fetch(uploadUrl, { method: 'DELETE', signal: AbortSignal.timeout(requestTimeoutMs) }).catch(() => undefined)
+}
+
+export async function uploadMicrosoftBuffer(accessToken: string, parentId: string, fileName: string, buffer: Buffer): Promise<MicrosoftUploadedItem> {
+  const name = sanitizeMicrosoftName(fileName)
+  if (buffer.length <= simpleUploadLimit) {
+    const response = await graphFetch(accessToken, `/me/drive/items/${parentId}:/${encodeURIComponent(name)}:/content?${conflictRename}=rename`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Blob([new Uint8Array(buffer)]),
+    })
+    return response.json() as Promise<MicrosoftUploadedItem>
+  }
+
+  const uploadUrl = await createMicrosoftUploadSession(accessToken, parentId, name)
+  try {
+    for (let start = 0; start < buffer.length; start += uploadChunkSize) {
+      const end = Math.min(start + uploadChunkSize, buffer.length)
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Length': String(end - start), 'Content-Range': `bytes ${start}-${end - 1}/${buffer.length}` },
+        body: new Blob([new Uint8Array(buffer.subarray(start, end))]),
+        signal: AbortSignal.timeout(chunkTimeoutMs),
+      })
+      if (response.status === 200 || response.status === 201) return await response.json() as MicrosoftUploadedItem
+      if (response.status !== 202) throw new GraphError(response.status, 'uploadFailed')
+    }
+    throw new GraphError(502, 'uploadIncomplete')
+  } catch (error) {
+    await cancelMicrosoftUploadSession(uploadUrl)
+    throw error
+  }
+}
+
+// Graph answers with a redirect to a pre-authenticated download URL. fetch drops the Authorization header on that
+// cross-origin hop and keeps Range, which is what is wanted. No timeout: the body can legitimately take a long time.
+export async function fetchMicrosoftFileContent(account: ConnectedAccount, itemId: string, range?: string, signal?: AbortSignal) {
+  const accessToken = await getMicrosoftAccessToken(account)
+  return fetch(`${graphBase}/me/drive/items/${encodeURIComponent(itemId)}/content`, {
+    headers: { Authorization: `Bearer ${accessToken}`, ...(range ? { Range: range } : {}) },
+    signal,
+  })
+}
+
+export async function deleteMicrosoftItem(account: ConnectedAccount, itemId: string) {
+  const accessToken = await getMicrosoftAccessToken(account)
+  await graphFetch(accessToken, `/me/drive/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }).catch((error) => {
+    // Already gone: the goal of the delete is met.
+    if (!(error instanceof GraphError && error.status === 404)) throw error
+  })
+}
+
+export async function renameMicrosoftItem(account: ConnectedAccount, itemId: string, name: string) {
+  const accessToken = await getMicrosoftAccessToken(account)
+  const item = await graphJson<{ name: string }>(accessToken, `/me/drive/items/${encodeURIComponent(itemId)}?$select=name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: sanitizeMicrosoftName(name) }),
+  }).catch((error) => {
+    if (error instanceof GraphError && error.status === 409) throw new HttpError(409, 'FILE_NAME_CONFLICT', 'A file with that name already exists in OneDrive.')
+    throw error
+  })
+  return item.name
+}

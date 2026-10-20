@@ -8,6 +8,7 @@ import { env } from '../../config/env.js'
 import { prisma } from '../../config/prisma.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
 import { ensureGoogleAppFolder, getAuthedGoogleClient, syncGoogleQuota } from '../google/google.service.js'
+import { cancelMicrosoftUploadSession, createMicrosoftUploadSession, ensureMicrosoftAppFolder, getMicrosoftAccessToken, queryMicrosoftUploadOffset, sanitizeMicrosoftName, syncMicrosoftQuota, uploadMicrosoftBuffer, type MicrosoftUploadedItem } from '../microsoft/microsoft.service.js'
 import { buildS3ObjectKey, getS3ConfigForAccount, syncS3Quota, uploadS3Object } from '../s3/s3.service.js'
 import { createAuditLog } from '../../utils/audit.js'
 import { HttpError, clientMessage, describeError } from '../../utils/http-error.js'
@@ -21,9 +22,9 @@ function logUpload(message: string, metadata?: Record<string, unknown>) {
   console.info('[upload]', message, metadata ?? '')
 }
 
-function syncQuotaInBackground(accountId: string, sessionId: string) {
+function syncQuotaInBackground(accountId: string, sessionId: string, provider = 'google_drive') {
   logUpload('quota sync started', { accountId, sessionId })
-  syncGoogleQuota(accountId)
+  ;(provider === 'onedrive' ? syncMicrosoftQuota(accountId) : syncGoogleQuota(accountId))
     .then(() => logUpload('quota sync completed', { accountId, sessionId }))
     .catch((error) => logUpload('quota sync failed', { accountId, sessionId, message: error instanceof Error ? error.message : 'Unknown error' }))
 }
@@ -46,7 +47,7 @@ function byPriority<T extends { account: { id: string; createdAt: Date } }>(item
 
 async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByAccount = new Map<string, bigint>(), targetAccountId?: string | null) {
   const accounts = await prisma.connectedAccount.findMany({
-    where: { userId, provider: { in: ['google_drive', 's3'] }, status: 'connected', ...(targetAccountId ? { id: targetAccountId } : {}) },
+    where: { userId, provider: { in: ['google_drive', 's3', 'onedrive'] }, status: 'connected', ...(targetAccountId ? { id: targetAccountId } : {}) },
     include: { storageAccount: true },
   })
 
@@ -55,6 +56,8 @@ async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByA
     try {
       if (account.provider === 's3') {
         await syncS3Quota(account.id)
+      } else if (account.provider === 'onedrive') {
+        await syncMicrosoftQuota(account.id)
       } else {
         await syncGoogleQuota(account.id)
       }
@@ -68,7 +71,7 @@ async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByA
   }))
 
   const fresh = await prisma.connectedAccount.findMany({
-    where: { userId, provider: { in: ['google_drive', 's3'] }, status: 'connected' },
+    where: { userId, provider: { in: ['google_drive', 's3', 'onedrive'] }, status: 'connected' },
     include: { storageAccount: true },
   })
 
@@ -211,6 +214,14 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
           await prisma.file.update({ where: { id: provisionalFile.id }, data: { providerFileId, status: 'active' } })
           completed.push({ ...provisionalFile, providerFileId, status: 'active', sizeBytes: provisionalFile.sizeBytes.toString() })
           logUpload('s3 upload completed', { sessionId: session.id, accountId: account.id, fileName })
+        } else if (account.provider === 'onedrive') {
+          // Virtual folders are database only, so the file always goes to the MultiDrive folder in OneDrive.
+          const accessToken = await getMicrosoftAccessToken(account)
+          const uploaded = await uploadMicrosoftBuffer(accessToken, await ensureMicrosoftAppFolder(accessToken), fileName, fileBuffer)
+          providerFileId = uploaded.id
+          uploadedName = uploaded.name ?? fileName
+          uploadedMimeType = uploaded.file?.mimeType ?? meta.mimeType
+          logUpload('onedrive upload completed', { sessionId: session.id, accountId: account.id, fileName })
         } else {
           const auth = await getAuthedGoogleClient(account)
           const drive = google.drive({ version: 'v3', auth })
@@ -240,14 +251,14 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
           return
         }
 
-        const file = account.provider === 's3' ? null : await prisma.file.create({ data: { userId: req.user!.id, connectedAccountId: account.id, folderId, provider: 'google_drive', providerFileId, name: uploadedName, mimeType: uploadedMimeType, sizeBytes: meta.sizeBytes } })
+        const file = account.provider === 's3' ? null : await prisma.file.create({ data: { userId: req.user!.id, connectedAccountId: account.id, folderId, provider: account.provider, providerFileId, name: uploadedName, mimeType: uploadedMimeType, sizeBytes: meta.sizeBytes } })
         if (file) {
           logUpload('database file created', { sessionId: session.id, fileId: file.id, accountId: account.id })
           completed.push({ ...file, sizeBytes: file.sizeBytes.toString() })
         }
         await prisma.uploadSession.update({ where: { id: session.id }, data: { status: 'completed', completedAt: new Date() } })
         if (account.provider === 's3') syncS3Quota(account.id).catch(() => undefined)
-        else syncQuotaInBackground(account.id, session.id)
+        else syncQuotaInBackground(account.id, session.id, account.provider)
       } catch (error) {
         fileStream.resume()
         // The detail stays in the server log; failed[] also becomes the response, so it only carries messages made for the client.
@@ -326,6 +337,15 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
     const account = await selectAccount(req.user!.id, sizeBytes, undefined, targetAccountId)
     if (!account) return res.status(400).json({ code: 'NO_ACCOUNT_WITH_ENOUGH_SPACE', message: 'No connected storage account has enough space.' })
 
+    if (account.provider === 'onedrive') {
+      const accessToken = await getMicrosoftAccessToken(account)
+      const uploadUrl = await createMicrosoftUploadSession(accessToken, await ensureMicrosoftAppFolder(accessToken), sanitizeMicrosoftName(body.fileName))
+      const session = await prisma.uploadSession.create({
+        data: { userId: req.user!.id, targetConnectedAccountId: account.id, folderId, fileName: body.fileName, mimeType: body.mimeType, sizeBytes, status: 'uploading', providerSessionUri: uploadUrl },
+      })
+      return res.status(201).json({ sessionId: session.id, provider: 'onedrive', offset: 0 })
+    }
+
     if (account.provider !== 'google_drive') {
       const session = await prisma.uploadSession.create({
         data: {
@@ -387,7 +407,7 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
         mimeType: body.mimeType,
         sizeBytes,
         status: 'uploading',
-        googleSessionUri: sessionUri
+        providerSessionUri: sessionUri
       }
     })
 
@@ -408,13 +428,18 @@ uploadRouter.get('/resumable/status/:id', requireAuth, async (req: AuthRequest, 
       return res.json({ status: 'completed', offset: session.sizeBytes.toString() })
     }
 
-    if (!session.googleSessionUri || !session.targetConnectedAccountId) {
+    if (!session.providerSessionUri || !session.targetConnectedAccountId) {
       return res.json({ status: 'uploading', offset: '0' })
     }
 
     const account = await prisma.connectedAccount.findFirstOrThrow({
       where: { id: session.targetConnectedAccountId, userId: req.user!.id }
     })
+    if (account.provider === 'onedrive') {
+      const offset = await queryMicrosoftUploadOffset(session.providerSessionUri)
+      return res.json({ status: 'uploading', offset: (offset ?? 0n).toString() })
+    }
+
     const auth = await getAuthedGoogleClient(account)
     const token = await auth.getAccessToken()
 
@@ -423,7 +448,7 @@ uploadRouter.get('/resumable/status/:id', requireAuth, async (req: AuthRequest, 
     queryHeaders.set('Authorization', `Bearer ${token.token}`)
     queryHeaders.set('Content-Range', `bytes */${session.sizeBytes}`)
 
-    const queryRes = await fetch(session.googleSessionUri, {
+    const queryRes = await fetch(session.providerSessionUri, {
       method: 'PUT',
       headers: queryHeaders
     })
@@ -466,13 +491,41 @@ uploadRouter.put('/resumable/chunk/:id', requireAuth, async (req: AuthRequest, r
     const endByte = BigInt(match[2])
     const totalBytes = BigInt(match[3])
 
-    if (!session.googleSessionUri || !session.targetConnectedAccountId) {
+    if (!session.providerSessionUri || !session.targetConnectedAccountId) {
       return res.status(400).json({ code: 'UNSUPPORTED_PROVIDER', message: 'Only Google Drive resumable uploads supported.' })
     }
 
     const account = await prisma.connectedAccount.findFirstOrThrow({
       where: { id: session.targetConnectedAccountId, userId: req.user!.id }
     })
+    if (account.provider === 'onedrive') {
+      // The upload URL is pre-authenticated, so no Authorization header goes with it.
+      const putRes = await fetch(session.providerSessionUri, {
+        method: 'PUT',
+        headers: { 'Content-Range': rangeHeader, 'Content-Length': (endByte - startByte + 1n).toString() },
+        body: req as any,
+        duplex: 'half',
+      } as any)
+      if (putRes.status === 202) return res.json({ status: 'uploading', offset: (endByte + 1n).toString() })
+      if (putRes.ok) {
+        const item = await putRes.json() as MicrosoftUploadedItem
+        let existingFile = await prisma.file.findFirst({ where: { providerFileId: item.id, userId: req.user!.id } })
+        if (!existingFile) {
+          existingFile = await prisma.file.create({
+            data: { userId: req.user!.id, connectedAccountId: account.id, folderId: session.folderId, provider: 'onedrive', providerFileId: item.id, name: item.name || session.fileName, mimeType: item.file?.mimeType || session.mimeType, sizeBytes: totalBytes },
+          })
+        }
+        await prisma.uploadSession.update({ where: { id: session.id }, data: { status: 'completed', completedAt: new Date() } })
+        await createAuditLog(req.user!.id, 'UPLOAD_FILE', 'file', existingFile.id, { name: existingFile.name, size: existingFile.sizeBytes.toString() })
+        syncQuotaInBackground(account.id, session.id, 'onedrive')
+        return res.status(201).json({ status: 'completed', file: { ...existingFile, sizeBytes: existingFile.sizeBytes.toString() } })
+      }
+      logUpload('onedrive chunk failed', { sessionId: session.id, status: putRes.status })
+      await prisma.uploadSession.update({ where: { id: session.id }, data: { status: 'failed', errorMessage: `OneDrive rejected the upload (${putRes.status}).` } })
+      await cancelMicrosoftUploadSession(session.providerSessionUri)
+      throw new HttpError(502, 'MICROSOFT_API_ERROR', 'OneDrive rejected the upload.')
+    }
+
     const auth = await getAuthedGoogleClient(account)
     const drive = google.drive({ version: 'v3', auth })
     const token = await auth.getAccessToken()
@@ -483,7 +536,7 @@ uploadRouter.put('/resumable/chunk/:id', requireAuth, async (req: AuthRequest, r
     putHeaders.set('Content-Range', rangeHeader)
     putHeaders.set('Content-Length', (endByte - startByte + 1n).toString())
 
-    const putRes = await fetch(session.googleSessionUri, {
+    const putRes = await fetch(session.providerSessionUri, {
       method: 'PUT',
       headers: putHeaders,
       body: req as any,
