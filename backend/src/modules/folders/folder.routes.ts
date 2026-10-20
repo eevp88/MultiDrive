@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { prisma } from '../../config/prisma.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
 import { getAuthedGoogleClient, syncGoogleQuota, ensureGoogleAppFolder } from '../google/google.service.js'
+import { deleteMicrosoftItem } from '../microsoft/microsoft.service.js'
+import { syncQuotaForAccount } from '../storage/sync-quota.js'
 import { createAuditLog } from '../../utils/audit.js'
 
 export const folderRouter = Router()
@@ -276,9 +278,13 @@ folderRouter.delete('/:id', async (req: AuthRequest, res, next) => {
     const syncedAccountIds = new Set<string>()
     for (const file of files) {
       try {
-        const auth = await getAuthedGoogleClient(file.connectedAccount)
-        const drive = google.drive({ version: 'v3', auth })
-        await drive.files.delete({ fileId: file.providerFileId })
+        if (file.provider === 'onedrive') {
+          await deleteMicrosoftItem(file.connectedAccount, file.providerFileId)
+        } else {
+          const auth = await getAuthedGoogleClient(file.connectedAccount)
+          const drive = google.drive({ version: 'v3', auth })
+          await drive.files.delete({ fileId: file.providerFileId })
+        }
         syncedAccountIds.add(file.connectedAccountId)
       } catch {
         // Keep going so one failure does not block the whole deletion
@@ -302,7 +308,10 @@ folderRouter.delete('/:id', async (req: AuthRequest, res, next) => {
 
     await prisma.file.updateMany({ where: { id: { in: files.map((file) => file.id) } }, data: { status: 'deleted', deletedAt: new Date() } })
     await prisma.folder.updateMany({ where: { id: { in: [...folderIds] }, userId: req.user!.id }, data: { deletedAt: new Date() } })
-    for (const accountId of syncedAccountIds) await syncGoogleQuota(accountId).catch(() => undefined)
+    for (const accountId of syncedAccountIds) {
+      const provider = files.find((file) => file.connectedAccountId === accountId)?.provider ?? 'google_drive'
+      await syncQuotaForAccount({ id: accountId, provider }).catch(() => undefined)
+    }
 
     await createAuditLog(req.user!.id, 'DELETE_FOLDER', 'folder', root.id, { name: root.name })
     return res.json({ status: 'ok' })

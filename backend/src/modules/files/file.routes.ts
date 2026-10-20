@@ -8,7 +8,9 @@ import { hashToken, randomToken } from '../../utils/crypto.js'
 import { openShareToken, sealShareToken } from '../../utils/share-token.js'
 import { HttpError, clientMessage, describeError } from '../../utils/http-error.js'
 import { thumbnailHandler } from '../photos/thumbnail.js'
-import { getAuthedGoogleClient, syncGoogleAppFolderFiles, syncGoogleQuota } from '../google/google.service.js'
+import { getAuthedGoogleClient, syncGoogleAppFolderFiles } from '../google/google.service.js'
+import { deleteMicrosoftItem, fetchMicrosoftFileContent, renameMicrosoftItem, syncMicrosoftAppFolderFiles } from '../microsoft/microsoft.service.js'
+import { syncQuotaForAccount } from '../storage/sync-quota.js'
 import { deleteS3Object, syncS3Quota, createS3Client, getS3ConfigForAccount } from '../s3/s3.service.js'
 import { streamProviderFile } from './stream-file.js'
 import { googleDownloadExportMimeTypes, normalizeHeaders, withExtension } from './stream-google-file.js'
@@ -177,6 +179,8 @@ fileRouter.delete('/batch/permanent', async (req: AuthRequest, res, next) => {
       try {
         if (file.provider === 's3') {
           await deleteS3Object(file)
+        } else if (file.provider === 'onedrive') {
+          await deleteMicrosoftItem(file.connectedAccount, file.providerFileId)
         } else {
           const auth = await getAuthedGoogleClient(file.connectedAccount)
           const drive = google.drive({ version: 'v3', auth })
@@ -199,11 +203,7 @@ fileRouter.delete('/batch/permanent', async (req: AuthRequest, res, next) => {
 
     for (const accountId of syncedAccountIds) {
       const account = files.find((file) => file.connectedAccountId === accountId)?.connectedAccount
-      if (account?.provider === 's3') {
-        await syncS3Quota(accountId).catch(() => undefined)
-      } else {
-        await syncGoogleQuota(accountId).catch(() => undefined)
-      }
+      if (account) await syncQuotaForAccount(account).catch(() => undefined)
     }
 
     if (deletedIds.length === 0 && failed.length > 0) {
@@ -244,12 +244,14 @@ fileRouter.post('/sync-google', async (req: AuthRequest, res, next) => {
   try {
     const body = z.object({ connectedAccountId: z.string().min(1).optional() }).parse(req.body ?? {})
     const accounts = await prisma.connectedAccount.findMany({
-      where: { userId: req.user!.id, provider: 'google_drive', status: 'connected', ...(body.connectedAccountId ? { id: body.connectedAccountId } : {}) },
-      select: { id: true },
+      where: { userId: req.user!.id, provider: { in: ['google_drive', 'onedrive'] }, status: 'connected', ...(body.connectedAccountId ? { id: body.connectedAccountId } : {}) },
+      select: { id: true, provider: true },
     })
 
     const results = []
-    for (const account of accounts) results.push(await syncGoogleAppFolderFiles(account.id, req.user!.id))
+    for (const account of accounts) {
+      results.push(account.provider === 'onedrive' ? await syncMicrosoftAppFolderFiles(account.id, req.user!.id) : await syncGoogleAppFolderFiles(account.id, req.user!.id))
+    }
 
     return res.json({
       status: 'ok',
@@ -275,10 +277,12 @@ fileRouter.patch('/:id', async (req: AuthRequest, res, next) => {
     const body = z.object({ name: z.string().min(1).max(255).optional(), folderId: z.string().nullable().optional() }).parse(req.body)
     const fileId = String(req.params.id)
     const file = await prisma.file.findFirstOrThrow({ where: { id: fileId, userId: req.user!.id }, include: { connectedAccount: true } })
-    const drive = file.provider === 's3' ? null : google.drive({ version: 'v3', auth: await getAuthedGoogleClient(file.connectedAccount) })
+    const drive = file.provider === 'google_drive' ? google.drive({ version: 'v3', auth: await getAuthedGoogleClient(file.connectedAccount) }) : null
     if (body.folderId) await prisma.folder.findFirstOrThrow({ where: { id: body.folderId, userId: req.user!.id, deletedAt: null } })
     if (body.name && drive) await drive.files.update({ fileId: file.providerFileId, requestBody: { name: body.name } })
-    const updated = await prisma.file.update({ where: { id: file.id }, data: { ...(body.name ? { name: body.name } : {}), ...(body.folderId !== undefined ? { folderId: body.folderId } : {}) }, include: { connectedAccount: { select: { id: true, email: true, provider: true } }, folder: { select: { id: true, name: true } } } })
+    // OneDrive may adjust the name (invalid characters), so the stored name is the one it reports back.
+    const newName = body.name && file.provider === 'onedrive' ? await renameMicrosoftItem(file.connectedAccount, file.providerFileId, body.name) : body.name
+    const updated = await prisma.file.update({ where: { id: file.id }, data: { ...(newName ? { name: newName } : {}), ...(body.folderId !== undefined ? { folderId: body.folderId } : {}) }, include: { connectedAccount: { select: { id: true, email: true, provider: true } }, folder: { select: { id: true, name: true } } } })
     await createAuditLog(req.user!.id, 'UPDATE_FILE', 'file', updated.id, { name: updated.name, updates: body })
     return res.json({ file: { ...updated, sizeBytes: updated.sizeBytes.toString() } })
   } catch (error) {
@@ -364,7 +368,7 @@ fileRouter.get('/:id/view-url', async (req: AuthRequest, res, next) => {
   try {
     const fileId = String(req.params.id)
     const file = await prisma.file.findFirstOrThrow({ where: { id: fileId, userId: req.user!.id }, include: { connectedAccount: true } })
-    if (file.provider === 's3') return res.json({ url: null })
+    if (file.provider !== 'google_drive') return res.json({ url: null })
     const auth = await getAuthedGoogleClient(file.connectedAccount)
     const drive = google.drive({ version: 'v3', auth })
 
@@ -428,6 +432,10 @@ fileRouter.post('/batch-download', async (req: AuthRequest, res, next) => {
           const client = createS3Client(config)
           const response = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: file.providerFileId }))
           stream = response.Body as Readable
+        } else if (file.provider === 'onedrive') {
+          const response = await fetchMicrosoftFileContent(file.connectedAccount, file.providerFileId)
+          if (!response.ok || !response.body) continue
+          stream = Readable.fromWeb(response.body as any)
         } else {
           const auth = await getAuthedGoogleClient(file.connectedAccount)
           const headers = normalizeHeaders(await auth.getRequestHeaders())
