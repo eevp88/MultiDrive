@@ -8,6 +8,7 @@ import { prisma } from '../../config/prisma.js'
 import type { AuthRequest } from '../../middleware/auth.middleware.js'
 import { HttpError } from '../../utils/http-error.js'
 import { getAuthedGoogleClient } from '../google/google.service.js'
+import { fetchMicrosoftThumbnail } from '../microsoft/microsoft.service.js'
 
 const querySchema = z.object({ size: z.coerce.number().int().min(32).max(2048).default(320) })
 
@@ -19,11 +20,22 @@ function thumbnailUrl(link: string, size: number) {
   return /=s\d+/.test(url.href) ? url.href.replace(/=s\d+/, `=s${size}`) : `${url.href}=s${size}`
 }
 
-// GET /files/:id/thumbnail?size=320. Google files only; Drive converts formats browsers cannot show (such as HEIF) to JPEG.
+// GET /files/:id/thumbnail?size=320. Google Drive and OneDrive files; both convert formats browsers cannot show (such as HEIF) to JPEG.
 export async function thumbnailHandler(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { size } = querySchema.parse(req.query)
     const file = await prisma.file.findFirstOrThrow({ where: { id: String(req.params.id), userId: req.user!.id, status: 'active' }, include: { connectedAccount: true } })
+    if (file.provider === 'onedrive') {
+      const upstream = await fetchMicrosoftThumbnail(file.connectedAccount, file.providerFileId, size)
+      const contentType = upstream?.headers.get('content-type') ?? ''
+      if (!upstream?.body || !contentType.startsWith('image/')) throw new HttpError(404, 'THUMBNAIL_UNAVAILABLE', 'No thumbnail for this file.')
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Cache-Control', 'private, max-age=3600')
+      const length = upstream.headers.get('content-length')
+      if (length) res.setHeader('Content-Length', length)
+      await pipeline(Readable.fromWeb(upstream.body as unknown as WebReadableStream<Uint8Array>), res).catch(() => undefined)
+      return
+    }
     if (file.provider !== 'google_drive') throw new HttpError(404, 'THUMBNAIL_UNAVAILABLE', 'No thumbnail for this file.')
 
     const drive = google.drive({ version: 'v3', auth: await getAuthedGoogleClient(file.connectedAccount) })
