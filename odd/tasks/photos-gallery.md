@@ -1,7 +1,7 @@
 # photos-gallery
 
 Objective: a photo gallery view in 9Drive across the connected Google accounts (the "multiFoto" idea), without Google Photos.
-Branch: `feat/photos-gallery` | Delivery strategy: `stacked-to-main` (assumed, see L8) | Test runner: none (backend and frontend have no test script)
+Branch: `feat/photos-gallery` | Delivery strategy: `stacked-to-main` (assumed, see L8; PRs merged in order) | Test runner: none (backend and frontend have no test script)
 
 ## Specs
 
@@ -21,7 +21,7 @@ Quotes are the user's exact words. Items marked (assumption) come from the assis
 - [x] T2 | S3 | inline | `imageMediaMetadata(time)` requested in `syncGoogleAppFolderFiles` and stored as `takenAt`; commit: 8f1e4d3 (observed end to end against the real Drive, see L17)
 - [x] T3 | S2, S7 | inline | `GET /files/:id/thumbnail` proxy with cache headers and no token leakage; commit: 18fd742 (observed on real Drive images: JPEG, HEIF served as JPEG, PNG; size, auth, ownership, S3 and validation cases; no Google URL in headers, body or logs)
 - [x] T4 | S4 | inline | `GET /photos` with cursor pagination; commit: ffb35c3 (observed: 30 visible rows walked in 5 pages with no repeats or gaps, strict (date, id) order, ties and null taken_at, user isolation, invalid cursor and limit cases)
-- [x] T5 | S1, S5 | inline | `/fotos` page, sidebar entry, i18n en and es; commit: d26ebbd (frontend build passes; served by the rebuilt frontend container; browser check by the user pending, see L20)
+- [x] T5 | S1, S5 | inline | `/fotos` page, sidebar entry, i18n en and es; commit: d26ebbd (frontend build passes; served by the rebuilt frontend container; opened in the browser by the user, see L21 and L23)
 - [x] T6 | S7 | inline | README and AGENTS.md API notes, end-to-end check against a real Drive account; commit: see L21 (docs written; end-to-end covered by L13, L17 and the browser check in L21)
 
 Route declaration: every task inline. No writer trigger applies: the tasks are sequential and share files, nothing runs in parallel. Exploration was done inline within the evidence budget.
