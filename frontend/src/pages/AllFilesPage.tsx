@@ -165,6 +165,10 @@ export function AllFilesPage() {
     if (startDate) params.set('startDate', startDate)
     if (endDate) params.set('endDate', endDate)
 
+    // Like a file manager: the root lists only its own files; a search or a filter looks through everything.
+    const searching = Boolean(searchQuery || kind || accountId || minSize || maxSize || startDate || endDate)
+    if (!activeFolderId && !searching) params.set('rootOnly', '1')
+
     const query = params.toString()
     const path = query ? `/files?${query}` : '/files'
     const data = await apiFetch<{ files: BackendFile[] }>(path)

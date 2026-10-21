@@ -220,6 +220,7 @@ Folders:
 Files:
 - `GET /files`
 - `GET /files?folderId=<id>`
+- `GET /files?rootOnly=1`: only the files that are not inside a folder (what All Files shows at the root when nothing is searched or filtered).
 - `GET /files?q=<search>`
 - `GET /files/shared-links`
 - `GET /files/:id`
