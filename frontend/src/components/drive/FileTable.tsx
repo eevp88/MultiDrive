@@ -2,13 +2,30 @@ import { FolderOpen, MoreVertical, Star } from 'lucide-react'
 import { type MouseEvent, useState } from 'react'
 import { AvatarStack } from '@/components/drive/AvatarStack'
 import { FileIcon } from '@/components/drive/FileIcon'
-import type { FileItem } from '@/data/drive-data'
+import { FolderVisual } from '@/components/drive/FolderVisual'
+import type { FileItem, FolderItem } from '@/data/drive-data'
 import { apiFetch } from '@/lib/api'
 import { useI18n } from '@/i18n/I18nProvider'
 
-export function FileTable({ files, mode = 'default', selectedFileIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleAll }: { files: FileItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleAll?: () => void }) {
+const dropHighlightClasses = ['bg-blue-50/50', 'border-blue-300']
+
+export function FileTable({ files, folders = [], mode = 'default', selectedFileIds = new Set<string>(), selectedFolderIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleFolder, onToggleAll, onFolderOpen, onFolderMenu, onDropItem }: { files: FileItem[]; folders?: FolderItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; selectedFolderIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleFolder?: (folder: FolderItem) => void; onToggleAll?: () => void; onFolderOpen?: (folder: FolderItem) => void; onFolderMenu?: (event: MouseEvent<HTMLElement>, folder: FolderItem) => void; onDropItem?: (fileId: string, folderId: string) => void }) {
   const { t } = useI18n()
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null)
+
+  function folderDropHandlers(folder: FolderItem) {
+    return {
+      onDragOver: (event: React.DragEvent<HTMLElement>) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' },
+      onDragEnter: (event: React.DragEvent<HTMLElement>) => { event.currentTarget.classList.add(...dropHighlightClasses) },
+      onDragLeave: (event: React.DragEvent<HTMLElement>) => { event.currentTarget.classList.remove(...dropHighlightClasses) },
+      onDrop: (event: React.DragEvent<HTMLElement>) => {
+        event.preventDefault()
+        event.currentTarget.classList.remove(...dropHighlightClasses)
+        const fileId = event.dataTransfer.getData('text/plain')
+        if (fileId && folder.id) onDropItem?.(fileId, folder.id)
+      },
+    }
+  }
 
   return (
     <div className="mt-4">
@@ -20,6 +37,19 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
             <input type="checkbox" className="h-5 w-5 accent-blue-600" checked={allSelected} onChange={onToggleAll} />
           </label>
         ) : null}
+        {folders.map((folder) => (
+          <article key={`folder-${folder.id ?? folder.name}`} onClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder)} className={selectedFolderIds.has(folder.id ?? '') ? 'cursor-pointer overflow-hidden rounded-2xl border file-selected p-3.5 shadow-sm' : 'cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm'}>
+            <div className="flex items-center gap-3">
+              {onToggleFolder ? <input type="checkbox" className="h-4 w-4 shrink-0 accent-blue-600" checked={selectedFolderIds.has(folder.id ?? '')} onChange={() => onToggleFolder(folder)} onClick={(event) => event.stopPropagation()} /> : null}
+              <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <h3 className="truncate text-sm font-bold leading-snug text-slate-950" title={folder.name}>{folder.name}</h3>
+                <div className="mt-1 text-xs text-slate-400">{folder.updated}</div>
+              </div>
+              <button className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onFolderMenu?.(event, folder) }} aria-label={t('table.openMenu', { name: folder.name })}><MoreVertical className="h-4 w-4" /></button>
+            </div>
+          </article>
+        ))}
         {files.map((file) => {
           const selected = selectedFileIds.has(file.id ?? '')
           const meta = mode === 'archived' ? file.location : mode === 'recent' ? file.openedDate : mode === 'starred' ? file.starredDate : file.date
@@ -63,6 +93,24 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
             </tr>
           </thead>
           <tbody>
+            {folders.map((folder) => (
+              <tr key={`folder-${folder.id ?? folder.name}`} onClick={() => onToggleFolder?.(folder)} onDoubleClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder)} className={selectedFolderIds.has(folder.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-pointer select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-pointer select-none'}>
+                <td className="py-2.5">{onToggleFolder ? <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={selectedFolderIds.has(folder.id ?? '')} onChange={() => onToggleFolder(folder)} onClick={(event) => event.stopPropagation()} /> : null}</td>
+                <td className="py-2.5 font-semibold">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
+                    <span className="truncate max-w-[200px] lg:max-w-[280px]" title={folder.name}>{folder.name}</span>
+                  </span>
+                </td>
+                {mode === 'default' ? <td className="py-2.5"><span className="text-xs text-slate-300">—</span></td> : null}
+                <td className="py-2.5 text-slate-500">{folder.updated}</td>
+                <td className="py-2.5 text-slate-500">—</td>
+                <td className="py-2.5" />
+                <td className="py-2.5 text-right">
+                  <button className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 shrink-0 ml-auto" onClick={(event) => { event.stopPropagation(); onFolderMenu?.(event, folder) }} aria-label={t('table.openMenu', { name: folder.name })}><MoreVertical className="h-4 w-4" /></button>
+                </td>
+              </tr>
+            ))}
             {files.map((file) => (
               <tr key={file.id ?? file.name} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', file.id ?? ''); event.dataTransfer.effectAllowed = 'move' }} onContextMenu={(event) => onFileContextMenu?.(event, file)} onClick={() => onToggleFile?.(file)} className={selectedFileIds.has(file.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-grab active:cursor-grabbing' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-grab active:cursor-grabbing'}>
                 <td className="py-2.5"><input type="checkbox" className="h-4 w-4 accent-blue-600" checked={selectedFileIds.has(file.id ?? '')} onChange={() => onToggleFile?.(file)} onClick={(event) => event.stopPropagation()} /></td>

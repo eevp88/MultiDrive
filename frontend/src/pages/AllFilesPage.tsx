@@ -113,6 +113,7 @@ export function AllFilesPage() {
   const [activeFile, setActiveFile] = useState<FileItem | null>(null)
   const [activeFolderForMenu, setActiveFolderForMenu] = useState<FolderItem | null>(null)
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
   const [cutFolder, setCutFolder] = useState<FolderItem | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileItem | null }>({ x: 0, y: 0, file: null })
   const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: FolderItem | null }>({ x: 0, y: 0, folder: null })
@@ -272,6 +273,11 @@ export function AllFilesPage() {
     }
   }, [previewOpen, activeFile?.mimeType, previewUrl])
 
+  useEffect(() => {
+    setSelectedFileIds(new Set())
+    setSelectedFolderIds(new Set())
+  }, [activeFolderId])
+
   async function createFolder(event: FormEvent) {
     event.preventDefault()
     await apiFetch('/folders', { method: 'POST', body: JSON.stringify({ name: folderName, color: folderColor, iconUrl: folderIconUrl, parentId: activeFolderId ?? null }) })
@@ -369,14 +375,27 @@ export function AllFilesPage() {
     })
   }
 
+  function toggleFolderSelection(folder: FolderItem) {
+    if (!folder.id) return
+    setSelectedFolderIds((current) => {
+      const next = new Set(current)
+      if (next.has(folder.id!)) next.delete(folder.id!)
+      else next.add(folder.id!)
+      return next
+    })
+  }
+
   function toggleAllVisibleFiles() {
-    const visibleIds = files.map((file) => file.id).filter(Boolean) as string[]
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedFileIds.has(id))
-    setSelectedFileIds(allSelected ? new Set() : new Set(visibleIds))
+    const visibleFileIds = files.map((file) => file.id).filter(Boolean) as string[]
+    const visibleFolderIds = visibleFolderRows.map((folder) => folder.id).filter(Boolean) as string[]
+    const allSelected = (visibleFileIds.length > 0 || visibleFolderIds.length > 0) && visibleFileIds.every((id) => selectedFileIds.has(id)) && visibleFolderIds.every((id) => selectedFolderIds.has(id))
+    setSelectedFileIds(allSelected ? new Set() : new Set(visibleFileIds))
+    setSelectedFolderIds(allSelected ? new Set() : new Set(visibleFolderIds))
   }
 
   function clearSelection() {
     setSelectedFileIds(new Set())
+    setSelectedFolderIds(new Set())
   }
 
   function changeFileViewMode(mode: FileViewMode) {
@@ -481,26 +500,54 @@ export function AllFilesPage() {
     await loadFiles()
   }
 
+  // A selected folder whose ancestor is also selected travels (or goes) with that ancestor.
+  function topLevelSelectedFolderIds() {
+    const parentById = new Map(allFolders.map((folder) => [folder.id, folder.parentId]))
+    return [...selectedFolderIds].filter((id) => {
+      const seen = new Set<string>()
+      let parentId = parentById.get(id)
+      while (parentId && !seen.has(parentId)) {
+        if (selectedFolderIds.has(parentId)) return false
+        seen.add(parentId)
+        parentId = parentById.get(parentId)
+      }
+      return true
+    })
+  }
+
   async function moveFile(event: FormEvent) {
     event.preventDefault()
     const selectedIds = [...selectedFileIds]
-    if (selectedIds.length > 0) await apiFetch('/files/batch', { method: 'PATCH', body: JSON.stringify({ fileIds: selectedIds, folderId: selectedFolderId || null }) })
-    else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'PATCH', body: JSON.stringify({ folderId: selectedFolderId || null }) })
+    const folderIds = topLevelSelectedFolderIds()
+    let failed = 0
+    if (selectedIds.length > 0 || folderIds.length > 0) {
+      if (selectedIds.length > 0) await apiFetch('/files/batch', { method: 'PATCH', body: JSON.stringify({ fileIds: selectedIds, folderId: selectedFolderId || null }) })
+      const results = await Promise.allSettled(folderIds.map((id) => apiFetch(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ parentId: selectedFolderId || null }) })))
+      failed = results.filter((result) => result.status === 'rejected').length
+    } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'PATCH', body: JSON.stringify({ folderId: selectedFolderId || null }) })
     else return
     setMoveOpen(false)
     setSelectedFolderId('')
     clearSelection()
-    await loadFiles()
+    setMessage(failed > 0 ? t('files.batchActionFailed') : '')
+    await Promise.all([loadFiles(), loadFolders()])
   }
 
   async function deleteFile() {
     const selectedIds = [...selectedFileIds]
-    if (selectedIds.length > 0) await apiFetch('/files/batch', { method: 'DELETE', body: JSON.stringify({ fileIds: selectedIds }) })
-    else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'DELETE' })
+    const folderIds = topLevelSelectedFolderIds()
+    let failed = 0
+    if (selectedIds.length > 0 || folderIds.length > 0) {
+      if (selectedIds.length > 0) await apiFetch('/files/batch', { method: 'DELETE', body: JSON.stringify({ fileIds: selectedIds }) })
+      for (const id of folderIds) {
+        try { await apiFetch(`/folders/${id}`, { method: 'DELETE' }) } catch { failed += 1 }
+      }
+    } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'DELETE' })
     else return
     setDeleteOpen(false)
     clearSelection()
-    await loadFiles()
+    setMessage(failed > 0 ? t('files.batchActionFailed') : '')
+    await Promise.all([loadFiles(), loadFolders()])
     window.dispatchEvent(new Event('multidrive:storage-changed'))
   }
 
@@ -690,7 +737,9 @@ export function AllFilesPage() {
     }
     return path
   })()
-  const allVisibleSelected = files.length > 0 && files.every((file) => file.id && selectedFileIds.has(file.id))
+  const visibleFolderRows = fileViewMode === 'list' && !searchQuery ? folders : []
+  const selectedCount = selectedFileIds.size + selectedFolderIds.size
+  const allVisibleSelected = (files.length > 0 || visibleFolderRows.length > 0) && files.every((file) => file.id && selectedFileIds.has(file.id)) && visibleFolderRows.every((folder) => folder.id && selectedFolderIds.has(folder.id))
   const activePreviewKind = getPreviewKind(activeFile?.mimeType)
 
   return (
@@ -709,21 +758,21 @@ export function AllFilesPage() {
         </div>
       </div>
       {message ? <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p> : null}
-      {!activeFolder && (recentFolders.length > 0 ? <FolderGrid items={recentFolders} mobileTwoColumns sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} /> : <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{t('files.noFolders')}</p>)}
-      {!activeFolder && moreFolders.length > 0 ? <>
+      {fileViewMode === 'grid' && !activeFolder && (recentFolders.length > 0 ? <FolderGrid items={recentFolders} mobileTwoColumns sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} /> : <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{t('files.noFolders')}</p>)}
+      {fileViewMode === 'grid' && !activeFolder && moreFolders.length > 0 ? <>
         <h2 className="mt-4 font-extrabold text-slate-700">{t('files.moreFolders')}</h2>
         <FolderGrid items={moreFolders} sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} />
       </> : null}
-      {activeFolder && folders.length > 0 ? <>
+      {fileViewMode === 'grid' && activeFolder && folders.length > 0 ? <>
         <h2 className="mt-4 font-extrabold text-slate-700">{t('files.folders')}</h2>
         <FolderGrid items={folders} sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} />
       </> : null}
       <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3"><Button variant="soft" className="hidden sm:inline-flex"><Archive className="h-4 w-4" />{t('files.recents')}</Button><Button variant="soft" className="hidden sm:inline-flex"><Star className="h-4 w-4" />{t('nav.starred')}</Button>{selectedFileIds.size > 0 ? <div className="flex w-full flex-col gap-3 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0"><span className="text-sm font-extrabold text-slate-700">{t('files.selected', { count: selectedFileIds.size })}</span><div className="grid grid-cols-4 gap-2 sm:flex sm:gap-3"><Button className="w-full" variant="outline" onClick={downloadBatchAsZip}><Download className="h-4 w-4" />{t('files.zip')}</Button><Button className="w-full" variant="outline" onClick={() => setMoveOpen(true)}><FolderInput className="h-4 w-4" />{t('table.move')}</Button><Button className="w-full" variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 className="h-4 w-4" />{t('action.delete')}</Button><Button className="w-full" variant="ghost" onClick={clearSelection}>{t('files.clear')}</Button></div></div> : null}</div>
+        <div className="flex flex-wrap items-center gap-3"><Button variant="soft" className="hidden sm:inline-flex"><Archive className="h-4 w-4" />{t('files.recents')}</Button><Button variant="soft" className="hidden sm:inline-flex"><Star className="h-4 w-4" />{t('nav.starred')}</Button>{selectedCount > 0 ? <div className="flex w-full flex-col gap-3 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0"><span className="text-sm font-extrabold text-slate-700">{t('files.selected', { count: selectedCount })}</span><div className="grid grid-cols-4 gap-2 sm:flex sm:gap-3"><Button className="w-full" variant="outline" disabled={selectedFileIds.size === 0} onClick={downloadBatchAsZip}><Download className="h-4 w-4" />{t('files.zip')}</Button><Button className="w-full" variant="outline" onClick={() => setMoveOpen(true)}><FolderInput className="h-4 w-4" />{t('table.move')}</Button><Button className="w-full" variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 className="h-4 w-4" />{t('action.delete')}</Button><Button className="w-full" variant="ghost" onClick={clearSelection}>{t('files.clear')}</Button></div></div> : null}</div>
         <div className="flex gap-3"><Button variant={fileViewMode === 'grid' ? 'soft' : 'outline'} size="icon" aria-label={t('files.viewGrid')} aria-pressed={fileViewMode === 'grid'} onClick={() => changeFileViewMode('grid')}><LayoutGrid className="h-5 w-5" /></Button><Button variant={fileViewMode === 'list' ? 'soft' : 'outline'} size="icon" aria-label={t('files.viewList')} aria-pressed={fileViewMode === 'list'} onClick={() => changeFileViewMode('list')}><List className="h-5 w-5" /></Button></div>
       </div>
       {cutFolder ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-700"><ClipboardPaste className="mr-2 inline h-4 w-4" />{t('files.cutNotice', { name: cutFolder.name })}</p> : null}
-      {files.length === 0 ? (
+      {files.length === 0 && (fileViewMode === 'grid' || folders.length === 0) ? (
         <Card className="mt-3 p-5 bg-white/10 backdrop-blur-sm border border-white/20 dark:bg-transparent dark:border-0 dark:p-0 dark:shadow-none">
           <p className="text-sm text-slate-500">{searchQuery ? t('files.emptySearch', { query: searchQuery }) : activeFolder ? t('files.emptyFolder') : t('files.emptyAll')}</p>
         </Card>
@@ -732,7 +781,7 @@ export function AllFilesPage() {
           {fileViewMode === 'grid' ? (
             <FileGrid files={files} selectedFileIds={selectedFileIds} sizeScale={folderSizeScale} onToggleFile={toggleFileSelection} onFileContextMenu={openContext} />
           ) : (
-            <FileTable files={files} selectedFileIds={selectedFileIds} allSelected={allVisibleSelected} onToggleFile={toggleFileSelection} onToggleAll={toggleAllVisibleFiles} onFileContextMenu={openContext} />
+            <FileTable files={files} folders={visibleFolderRows} selectedFileIds={selectedFileIds} selectedFolderIds={selectedFolderIds} allSelected={allVisibleSelected} onToggleFile={toggleFileSelection} onToggleFolder={toggleFolderSelection} onToggleAll={toggleAllVisibleFiles} onFileContextMenu={openContext} onFolderOpen={openFolder} onFolderMenu={openFolderMenu} onDropItem={handleDropItem} />
           )}
         </Card>
       )}
@@ -778,8 +827,8 @@ export function AllFilesPage() {
         </form>
       </DummyModal>
       <DummyModal open={renameOpen} title={t('files.renameFileTitle')} description={activeFile?.name ?? ''} onClose={() => setRenameOpen(false)}><form onSubmit={renameFile} className="grid gap-4"><Input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} required /><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>{t('common.cancel')}</Button><Button>{t('action.rename')}</Button></div></form></DummyModal>
-      <DummyModal open={moveOpen} title={t('action.move')} description={selectedFileIds.size > 0 ? t('files.moveCount', { count: selectedFileIds.size }) : activeFile?.name ?? ''} onClose={() => setMoveOpen(false)}><form onSubmit={moveFile} className="grid gap-4"><select className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">{t('details.noFolder')}</option>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>{t('common.cancel')}</Button><Button>{t('table.move')}</Button></div></form></DummyModal>
-      <DummyModal open={deleteOpen} title={selectedFileIds.size > 0 ? t('files.deleteFiles') : t('files.deleteFile')} description={selectedFileIds.size > 0 ? t('files.deleteMany', { count: selectedFileIds.size }) : t('files.deleteOne', { name: activeFile?.name ?? t('files.fileWord') })} onClose={() => setDeleteOpen(false)}><div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setDeleteOpen(false)}>{t('common.cancel')}</Button><Button variant="danger" onClick={deleteFile}>{t('action.delete')}</Button></div></DummyModal>
+      <DummyModal open={moveOpen} title={t('action.move')} description={selectedCount > 0 ? t(selectedFolderIds.size > 0 ? 'files.moveCountItems' : 'files.moveCount', { count: selectedCount }) : activeFile?.name ?? ''} onClose={() => setMoveOpen(false)}><form onSubmit={moveFile} className="grid gap-4"><select className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">{t('details.noFolder')}</option>{allFolders.filter((folder) => !selectedFolderIds.has(folder.id ?? '')).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>{t('common.cancel')}</Button><Button>{t('table.move')}</Button></div></form></DummyModal>
+      <DummyModal open={deleteOpen} title={selectedFolderIds.size > 0 ? t('files.deleteItems') : selectedFileIds.size > 0 ? t('files.deleteFiles') : t('files.deleteFile')} description={selectedFolderIds.size > 0 ? t('files.deleteManyItems', { count: selectedCount }) : selectedFileIds.size > 0 ? t('files.deleteMany', { count: selectedFileIds.size }) : t('files.deleteOne', { name: activeFile?.name ?? t('files.fileWord') })} onClose={() => setDeleteOpen(false)}><div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setDeleteOpen(false)}>{t('common.cancel')}</Button><Button variant="danger" onClick={deleteFile}>{t('action.delete')}</Button></div></DummyModal>
       <DummyModal open={shareOpen} title={t('action.shareLink')} description={activeFile?.name ?? ''} onClose={() => setShareOpen(false)}>
         <div className="grid gap-4">
           <div>
