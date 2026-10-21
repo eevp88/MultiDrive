@@ -9,7 +9,7 @@ import { useI18n } from '@/i18n/I18nProvider'
 
 const dropHighlightClasses = ['bg-blue-50/50', 'border-blue-300']
 
-export function FileTable({ files, folders = [], mode = 'default', selectedFileIds = new Set<string>(), selectedFolderIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleFolder, onToggleAll, onFolderOpen, onFolderMenu, onDropItem }: { files: FileItem[]; folders?: FolderItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; selectedFolderIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleFolder?: (folder: FolderItem) => void; onToggleAll?: () => void; onFolderOpen?: (folder: FolderItem) => void; onFolderMenu?: (event: MouseEvent<HTMLElement>, folder: FolderItem) => void; onDropItem?: (fileId: string, folderId: string) => void }) {
+export function FileTable({ files, folders = [], mode = 'default', selectedFileIds = new Set<string>(), selectedFolderIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleFolder, onToggleAll, onRowClick, onFolderOpen, onFolderMenu, onDropItem }: { files: FileItem[]; folders?: FolderItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; selectedFolderIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleFolder?: (folder: FolderItem) => void; onToggleAll?: () => void; onRowClick?: (item: { type: 'file' | 'folder'; id?: string }, event: MouseEvent<HTMLElement>) => void; onFolderOpen?: (folder: FolderItem) => void; onFolderMenu?: (event: MouseEvent<HTMLElement>, folder: FolderItem) => void; onDropItem?: (fileId: string, folderId: string) => void }) {
   const { t } = useI18n()
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null)
 
@@ -79,7 +79,6 @@ export function FileTable({ files, folders = [], mode = 'default', selectedFileI
         <table className="w-full min-w-[760px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200/20 text-slate-950">
-              <th className="w-9 py-2.5"><input type="checkbox" className="h-4 w-4 accent-blue-600" checked={allSelected} onChange={onToggleAll} /></th>
               <th className="py-2.5 font-extrabold">{t('table.name')}</th>
               {mode === 'default' ? <th className="py-2.5 font-extrabold text-slate-500 font-semibold">{t('table.folder')}</th> : null}
               {mode === 'shared' ? <th className="py-2.5 font-extrabold">{t('table.owner')}</th> : null}
@@ -94,8 +93,7 @@ export function FileTable({ files, folders = [], mode = 'default', selectedFileI
           </thead>
           <tbody>
             {folders.map((folder) => (
-              <tr key={`folder-${folder.id ?? folder.name}`} onClick={() => onToggleFolder?.(folder)} onDoubleClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder)} className={selectedFolderIds.has(folder.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-pointer select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-pointer select-none'}>
-                <td className="py-2.5">{onToggleFolder ? <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={selectedFolderIds.has(folder.id ?? '')} onChange={() => onToggleFolder(folder)} onClick={(event) => event.stopPropagation()} /> : null}</td>
+              <tr key={`folder-${folder.id ?? folder.name}`} onClick={(event) => (onRowClick ? onRowClick({ type: 'folder', id: folder.id }, event) : onToggleFolder?.(folder))} onDoubleClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder)} className={selectedFolderIds.has(folder.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-pointer select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-pointer select-none'}>
                 <td className="py-2.5 font-semibold">
                   <span className="flex min-w-0 items-center gap-2.5">
                     <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
@@ -112,8 +110,7 @@ export function FileTable({ files, folders = [], mode = 'default', selectedFileI
               </tr>
             ))}
             {files.map((file) => (
-              <tr key={file.id ?? file.name} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', file.id ?? ''); event.dataTransfer.effectAllowed = 'move' }} onContextMenu={(event) => onFileContextMenu?.(event, file)} onClick={() => onToggleFile?.(file)} className={selectedFileIds.has(file.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-grab active:cursor-grabbing' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-grab active:cursor-grabbing'}>
-                <td className="py-2.5"><input type="checkbox" className="h-4 w-4 accent-blue-600" checked={selectedFileIds.has(file.id ?? '')} onChange={() => onToggleFile?.(file)} onClick={(event) => event.stopPropagation()} /></td>
+              <tr key={file.id ?? file.name} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', file.id ?? ''); event.dataTransfer.effectAllowed = 'move' }} onContextMenu={(event) => onFileContextMenu?.(event, file)} onClick={(event) => (onRowClick ? onRowClick({ type: 'file', id: file.id }, event) : onToggleFile?.(file))} className={selectedFileIds.has(file.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-grab active:cursor-grabbing select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-grab active:cursor-grabbing select-none'}>
                 <td className="py-2.5 font-semibold">
                   <span className="flex min-w-0 items-center gap-2.5">
                     {mode === 'starred' ? <Star className="h-4 w-4 shrink-0 fill-yellow-400 text-yellow-400" /> : <FileIcon kind={file.kind} />}

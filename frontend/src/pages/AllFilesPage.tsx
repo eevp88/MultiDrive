@@ -114,6 +114,7 @@ export function AllFilesPage() {
   const [activeFolderForMenu, setActiveFolderForMenu] = useState<FolderItem | null>(null)
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
+  const selectionAnchorRef = useRef<{ type: 'file' | 'folder'; id: string } | null>(null)
   const [cutFolder, setCutFolder] = useState<FolderItem | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileItem | null }>({ x: 0, y: 0, file: null })
   const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: FolderItem | null }>({ x: 0, y: 0, folder: null })
@@ -276,7 +277,22 @@ export function AllFilesPage() {
   useEffect(() => {
     setSelectedFileIds(new Set())
     setSelectedFolderIds(new Set())
+    selectionAnchorRef.current = null
   }, [activeFolderId])
+
+  // Re-registered on every render so it always sees the current lists.
+  useEffect(() => {
+    function onSelectAll(event: KeyboardEvent) {
+      const target = event.target
+      if (target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+        event.preventDefault()
+        selectAllVisible()
+      }
+    }
+    window.addEventListener('keydown', onSelectAll)
+    return () => window.removeEventListener('keydown', onSelectAll)
+  })
 
   async function createFolder(event: FormEvent) {
     event.preventDefault()
@@ -396,6 +412,41 @@ export function AllFilesPage() {
   function clearSelection() {
     setSelectedFileIds(new Set())
     setSelectedFolderIds(new Set())
+  }
+
+  function selectAllVisible() {
+    setSelectedFileIds(new Set(files.map((file) => file.id).filter(Boolean) as string[]))
+    setSelectedFolderIds(new Set(visibleFolderRows.map((folder) => folder.id).filter(Boolean) as string[]))
+  }
+
+  // File-manager selection on desktop: click selects one row, Ctrl/Cmd+click toggles it, Shift+click selects a range.
+  function handleRowClick(item: { type: 'file' | 'folder'; id?: string }, event: MouseEvent<HTMLElement>) {
+    if (!item.id) return
+    const order = [...visibleFolderRows.map((folder) => ({ type: 'folder' as const, id: folder.id })), ...files.map((file) => ({ type: 'file' as const, id: file.id }))].filter((entry): entry is { type: 'file' | 'folder'; id: string } => Boolean(entry.id))
+    const anchor = selectionAnchorRef.current
+    if (event.shiftKey && anchor) {
+      const from = order.findIndex((entry) => entry.type === anchor.type && entry.id === anchor.id)
+      const to = order.findIndex((entry) => entry.type === item.type && entry.id === item.id)
+      if (from >= 0 && to >= 0) {
+        const range = order.slice(Math.min(from, to), Math.max(from, to) + 1)
+        setSelectedFileIds(new Set(range.filter((entry) => entry.type === 'file').map((entry) => entry.id)))
+        setSelectedFolderIds(new Set(range.filter((entry) => entry.type === 'folder').map((entry) => entry.id)))
+        return
+      }
+    }
+    selectionAnchorRef.current = { type: item.type, id: item.id }
+    const setIds = item.type === 'file' ? setSelectedFileIds : setSelectedFolderIds
+    if (event.ctrlKey || event.metaKey) {
+      setIds((current) => {
+        const next = new Set(current)
+        if (next.has(item.id!)) next.delete(item.id!)
+        else next.add(item.id!)
+        return next
+      })
+      return
+    }
+    setSelectedFileIds(new Set(item.type === 'file' ? [item.id] : []))
+    setSelectedFolderIds(new Set(item.type === 'folder' ? [item.id] : []))
   }
 
   function changeFileViewMode(mode: FileViewMode) {
@@ -781,7 +832,7 @@ export function AllFilesPage() {
           {fileViewMode === 'grid' ? (
             <FileGrid files={files} selectedFileIds={selectedFileIds} sizeScale={folderSizeScale} onToggleFile={toggleFileSelection} onFileContextMenu={openContext} />
           ) : (
-            <FileTable files={files} folders={visibleFolderRows} selectedFileIds={selectedFileIds} selectedFolderIds={selectedFolderIds} allSelected={allVisibleSelected} onToggleFile={toggleFileSelection} onToggleFolder={toggleFolderSelection} onToggleAll={toggleAllVisibleFiles} onFileContextMenu={openContext} onFolderOpen={openFolder} onFolderMenu={openFolderMenu} onDropItem={handleDropItem} />
+            <FileTable files={files} folders={visibleFolderRows} selectedFileIds={selectedFileIds} selectedFolderIds={selectedFolderIds} allSelected={allVisibleSelected} onToggleFile={toggleFileSelection} onToggleFolder={toggleFolderSelection} onToggleAll={toggleAllVisibleFiles} onRowClick={handleRowClick} onFileContextMenu={openContext} onFolderOpen={openFolder} onFolderMenu={openFolderMenu} onDropItem={handleDropItem} />
           )}
         </Card>
       )}
