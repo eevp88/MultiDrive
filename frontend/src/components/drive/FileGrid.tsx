@@ -2,7 +2,9 @@ import { MoreVertical } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { Card } from '@/components/ui/card'
 import { FileIcon } from '@/components/drive/FileIcon'
-import type { FileItem } from '@/data/drive-data'
+import { FolderVisual } from '@/components/drive/FolderVisual'
+import { folderDropHandlers } from '@/components/drive/folder-drop'
+import type { FileItem, FolderItem } from '@/data/drive-data'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n/I18nProvider'
 
@@ -77,21 +79,67 @@ const scaleConfig: Record<FileSizeScale, {
 
 export function FileGrid({
   files,
+  folders = [],
   selectedFileIds = new Set<string>(),
+  selectedFolderIds = new Set<string>(),
   sizeScale = 'md',
   onFileContextMenu,
-  onToggleFile
+  onToggleFile,
+  onToggleFolder,
+  onFolderOpen,
+  onFolderMenu,
+  onDropItem
 }: {
   files: FileItem[]
+  folders?: FolderItem[]
   selectedFileIds?: Set<string>
+  selectedFolderIds?: Set<string>
   sizeScale?: FileSizeScale
   onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void
   onToggleFile?: (file: FileItem) => void
+  onToggleFolder?: (folder: FolderItem) => void
+  onFolderOpen?: (folder: FolderItem) => void
+  onFolderMenu?: (event: MouseEvent<HTMLElement>, folder: FolderItem) => void
+  onDropItem?: (fileId: string, folderId: string) => void
 }) {
   const { t } = useI18n()
   const cfg = scaleConfig[sizeScale]
   return (
     <div className={cn("mt-5 grid", cfg.grid)}>
+      {folders.map((folder) => {
+        const selected = selectedFolderIds.has(folder.id ?? '')
+        return (
+          <Card
+            key={`folder-${folder.id ?? folder.name}`}
+            onClick={() => onToggleFolder?.(folder)}
+            onDoubleClick={() => onFolderOpen?.(folder)}
+            onContextMenu={(event) => onFolderMenu?.(event, folder)}
+            {...folderDropHandlers(folder, onDropItem)}
+            className={cn(
+              selected
+                ? 'relative cursor-pointer select-none overflow-hidden file-selected shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
+                : 'relative cursor-pointer select-none overflow-hidden transition hover:-translate-y-0.5 hover:shadow-md',
+              cfg.card
+            )}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <input type="checkbox" className={cn("shrink-0 accent-blue-600", cfg.checkbox)} checked={selected} onChange={() => onToggleFolder?.(folder)} onClick={(event) => event.stopPropagation()} />
+              <button className={cn("flex shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-white/80", cfg.menuBtn)} onClick={(event) => { event.stopPropagation(); onFolderMenu?.(event, folder) }} aria-label={t('table.openMenu', { name: folder.name })}><MoreVertical className="h-4 w-4" /></button>
+            </div>
+
+            <div className="flex justify-center mt-2">
+              <div className={cn("flex items-center justify-center rounded-2xl bg-slate-100", cfg.iconShell)}>
+                <FolderVisual folder={folder} className="h-3/5 w-3/5" />
+              </div>
+            </div>
+
+            <div className={cn("min-w-0 text-center", cfg.mtCard)}>
+              <h3 className={cn("font-extrabold text-slate-950 line-clamp-2 [overflow-wrap:anywhere]", cfg.title)} title={folder.name}>{folder.name}</h3>
+              <p className={cfg.date}>{folder.updated}</p>
+            </div>
+          </Card>
+        )
+      })}
       {files.map((file) => {
         const selected = selectedFileIds.has(file.id ?? '')
         return (
@@ -115,7 +163,7 @@ export function FileGrid({
 
             <div className="flex justify-center mt-2">
               <div className={cn("flex items-center justify-center rounded-2xl bg-slate-100 text-slate-700", cfg.iconShell)}>
-                <FileIcon kind={file.kind} className={cfg.icon} />
+                <FileIcon kind={file.kind} mimeType={file.mimeType} name={file.name} className={cfg.icon} />
               </div>
             </div>
 

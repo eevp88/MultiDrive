@@ -2,11 +2,13 @@ import { FolderOpen, MoreVertical, Star } from 'lucide-react'
 import { type MouseEvent, useState } from 'react'
 import { AvatarStack } from '@/components/drive/AvatarStack'
 import { FileIcon } from '@/components/drive/FileIcon'
-import type { FileItem } from '@/data/drive-data'
+import { FolderVisual } from '@/components/drive/FolderVisual'
+import { folderDropHandlers } from '@/components/drive/folder-drop'
+import type { FileItem, FolderItem } from '@/data/drive-data'
 import { apiFetch } from '@/lib/api'
 import { useI18n } from '@/i18n/I18nProvider'
 
-export function FileTable({ files, mode = 'default', selectedFileIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleAll }: { files: FileItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleAll?: () => void }) {
+export function FileTable({ files, folders = [], mode = 'default', selectedFileIds = new Set<string>(), selectedFolderIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleFolder, onToggleAll, onRowClick, onFolderOpen, onFolderMenu, onDropItem }: { files: FileItem[]; folders?: FolderItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; selectedFolderIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleFolder?: (folder: FolderItem) => void; onToggleAll?: () => void; onRowClick?: (item: { type: 'file' | 'folder'; id?: string }, event: MouseEvent<HTMLElement>) => void; onFolderOpen?: (folder: FolderItem) => void; onFolderMenu?: (event: MouseEvent<HTMLElement>, folder: FolderItem) => void; onDropItem?: (fileId: string, folderId: string) => void }) {
   const { t } = useI18n()
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null)
 
@@ -20,6 +22,19 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
             <input type="checkbox" className="h-5 w-5 accent-blue-600" checked={allSelected} onChange={onToggleAll} />
           </label>
         ) : null}
+        {folders.map((folder) => (
+          <article key={`folder-${folder.id ?? folder.name}`} onClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder, onDropItem)} className={selectedFolderIds.has(folder.id ?? '') ? 'cursor-pointer overflow-hidden rounded-2xl border file-selected p-3.5 shadow-sm' : 'cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm'}>
+            <div className="flex items-center gap-3">
+              {onToggleFolder ? <input type="checkbox" className="h-4 w-4 shrink-0 accent-blue-600" checked={selectedFolderIds.has(folder.id ?? '')} onChange={() => onToggleFolder(folder)} onClick={(event) => event.stopPropagation()} /> : null}
+              <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <h3 className="truncate text-sm font-bold leading-snug text-slate-950" title={folder.name}>{folder.name}</h3>
+                <div className="mt-1 text-xs text-slate-400">{folder.updated}</div>
+              </div>
+              <button className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100" onClick={(event) => { event.stopPropagation(); onFolderMenu?.(event, folder) }} aria-label={t('table.openMenu', { name: folder.name })}><MoreVertical className="h-4 w-4" /></button>
+            </div>
+          </article>
+        ))}
         {files.map((file) => {
           const selected = selectedFileIds.has(file.id ?? '')
           const meta = mode === 'archived' ? file.location : mode === 'recent' ? file.openedDate : mode === 'starred' ? file.starredDate : file.date
@@ -27,7 +42,7 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
             <article key={file.id ?? file.name} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', file.id ?? ''); event.dataTransfer.effectAllowed = 'move' }} onClick={() => onToggleFile?.(file)} onContextMenu={(event) => onFileContextMenu?.(event, file)} className={selected ? 'overflow-hidden rounded-2xl border file-selected p-3.5 shadow-sm cursor-grab active:cursor-grabbing' : 'overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm cursor-grab active:cursor-grabbing'}>
               <div className="flex items-center gap-3">
                 {onToggleFile ? <input type="checkbox" className="h-4 w-4 shrink-0 accent-blue-600" checked={selected} onChange={() => onToggleFile?.(file)} onClick={(event) => event.stopPropagation()} /> : null}
-                <div className="shrink-0">{mode === 'starred' ? <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" /> : <FileIcon kind={file.kind} />}</div>
+                <div className="shrink-0">{mode === 'starred' ? <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" /> : <FileIcon kind={file.kind} mimeType={file.mimeType} name={file.name} />}</div>
                 <div className="min-w-0 flex-1 overflow-hidden">
                   <h3 className="truncate text-sm font-bold leading-snug text-slate-950" title={file.name}>{file.name}</h3>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
@@ -49,7 +64,6 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
         <table className="w-full min-w-[760px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200/20 text-slate-950">
-              <th className="w-9 py-2.5"><input type="checkbox" className="h-4 w-4 accent-blue-600" checked={allSelected} onChange={onToggleAll} /></th>
               <th className="py-2.5 font-extrabold">{t('table.name')}</th>
               {mode === 'default' ? <th className="py-2.5 font-extrabold text-slate-500 font-semibold">{t('table.folder')}</th> : null}
               {mode === 'shared' ? <th className="py-2.5 font-extrabold">{t('table.owner')}</th> : null}
@@ -63,12 +77,28 @@ export function FileTable({ files, mode = 'default', selectedFileIds = new Set<s
             </tr>
           </thead>
           <tbody>
-            {files.map((file) => (
-              <tr key={file.id ?? file.name} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', file.id ?? ''); event.dataTransfer.effectAllowed = 'move' }} onContextMenu={(event) => onFileContextMenu?.(event, file)} onClick={() => onToggleFile?.(file)} className={selectedFileIds.has(file.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-grab active:cursor-grabbing' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-grab active:cursor-grabbing'}>
-                <td className="py-2.5"><input type="checkbox" className="h-4 w-4 accent-blue-600" checked={selectedFileIds.has(file.id ?? '')} onChange={() => onToggleFile?.(file)} onClick={(event) => event.stopPropagation()} /></td>
+            {folders.map((folder) => (
+              <tr key={`folder-${folder.id ?? folder.name}`} onClick={(event) => (onRowClick ? onRowClick({ type: 'folder', id: folder.id }, event) : onToggleFolder?.(folder))} onDoubleClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder, onDropItem)} className={selectedFolderIds.has(folder.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-pointer select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-pointer select-none'}>
                 <td className="py-2.5 font-semibold">
                   <span className="flex min-w-0 items-center gap-2.5">
-                    {mode === 'starred' ? <Star className="h-4 w-4 shrink-0 fill-yellow-400 text-yellow-400" /> : <FileIcon kind={file.kind} />}
+                    <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
+                    <span className="truncate max-w-[200px] lg:max-w-[280px]" title={folder.name}>{folder.name}</span>
+                  </span>
+                </td>
+                {mode === 'default' ? <td className="py-2.5"><span className="text-xs text-slate-300">—</span></td> : null}
+                <td className="py-2.5 text-slate-500">{folder.updated}</td>
+                <td className="py-2.5 text-slate-500">—</td>
+                <td className="py-2.5" />
+                <td className="py-2.5 text-right">
+                  <button className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 shrink-0 ml-auto" onClick={(event) => { event.stopPropagation(); onFolderMenu?.(event, folder) }} aria-label={t('table.openMenu', { name: folder.name })}><MoreVertical className="h-4 w-4" /></button>
+                </td>
+              </tr>
+            ))}
+            {files.map((file) => (
+              <tr key={file.id ?? file.name} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', file.id ?? ''); event.dataTransfer.effectAllowed = 'move' }} onContextMenu={(event) => onFileContextMenu?.(event, file)} onClick={(event) => (onRowClick ? onRowClick({ type: 'file', id: file.id }, event) : onToggleFile?.(file))} className={selectedFileIds.has(file.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-grab active:cursor-grabbing select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-grab active:cursor-grabbing select-none'}>
+                <td className="py-2.5 font-semibold">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    {mode === 'starred' ? <Star className="h-4 w-4 shrink-0 fill-yellow-400 text-yellow-400" /> : <FileIcon kind={file.kind} mimeType={file.mimeType} name={file.name} />}
                     <span className="truncate max-w-[200px] lg:max-w-[280px]" title={file.name}>{file.name}</span>
                   </span>
                 </td>
