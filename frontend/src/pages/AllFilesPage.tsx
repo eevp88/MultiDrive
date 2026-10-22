@@ -731,6 +731,11 @@ export function AllFilesPage() {
     return () => window.removeEventListener('multidrive:upload-completed', handleUploadCompleted)
   }, [activeFolderId])
 
+  // The header buttons are only rebuilt when the dependencies below change, so they must not call a stale copy of the sync
+  // (it would reload the folder the page was opened in instead of the current one).
+  const syncGoogleDriveRef = useRef(syncGoogleDrive)
+  syncGoogleDriveRef.current = syncGoogleDrive
+
   useEffect(() => {
     const sizeLabels: FolderSizeScale[] = ['xs', 'sm', 'md', 'lg']
     setHeaderActions(
@@ -763,7 +768,7 @@ export function AllFilesPage() {
         <Button size="sm" variant="outline" onClick={() => setFolderOpen(true)}>
           <FolderPlus className="h-3.5 w-3.5" />{t('areaMenu.newFolder')}
         </Button>
-        <Button size="sm" variant="outline" disabled={syncingDrive} onClick={syncGoogleDrive}>
+        <Button size="sm" variant="outline" disabled={syncingDrive} onClick={() => syncGoogleDriveRef.current()}>
           <RefreshCw className={syncingDrive ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
           {syncingDrive ? t('files.syncing') : t('files.sync')}
         </Button>
