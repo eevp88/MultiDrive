@@ -794,6 +794,56 @@ The project used to be called 9Drive. On upgrade:
 - Put the backend behind HTTPS.
 - Consider secure cookies or stronger token storage for production.
 
+### Production Checklist
+
+Go through it in order; the first block decides the rest. Each item is something you can confirm before moving on. The VPS steps above explain how to run the containers, this list is what has to be true before real users reach them.
+
+#### 1. Domain and HTTPS
+
+- [ ] A reverse proxy with a certificate (Caddy, nginx or Traefik) sits in front. The frontend container only serves plain HTTP on port 80, published as `5173`.
+- [ ] You chose one topology and set the variables for it:
+  - **One domain (default build).** Leave `VITE_API_URL` empty. The browser calls `/api` and the frontend nginx forwards it to the backend, so the OAuth callbacks go through that prefix, for example `https://example.com/api/connected-accounts/google/callback`.
+  - **Separate API domain.** Set `VITE_API_URL=https://api.example.com` and rebuild the frontend, because Vite embeds it at build time.
+- [ ] The backend port `4000` is not reachable from the internet (bind it to `127.0.0.1` or stop publishing it in `docker-compose.yml`) once the proxy is in place. MySQL already listens on `127.0.0.1` only.
+- [ ] The outer proxy allows large uploads and does not buffer them: the app streams files and accepts up to `MAX_UPLOAD_BYTES`, and the frontend nginx already allows 5 GB with long timeouts.
+
+#### 2. Environment
+
+- [ ] `FRONTEND_URL` is the public frontend URL (it drives CORS).
+- [ ] `GOOGLE_REDIRECT_URI` (and `MICROSOFT_REDIRECT_URI` if you use OneDrive) are the public callback URLs.
+- [ ] `JWT_ACCESS_SECRET`, `TOKEN_ENCRYPTION_KEY`, `MYSQL_ROOT_PASSWORD` and `MYSQL_PASSWORD` are generated, unique and not the example values. The backend refuses to start with values that begin with `change-this` or `replace-with`.
+- [ ] `TRUST_PROXY` equals the number of proxies in front of the backend (`1` for a single one). Never use `true`.
+- [ ] Captcha: either both `VITE_RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` are set, or you accept that registration has no captcha.
+- [ ] `.env` is not committed and is readable only by the deploy user.
+
+#### 3. Google OAuth
+
+- [ ] The production origin and redirect URI are added to the OAuth client in Google Cloud Console.
+- [ ] The consent screen is **published**. While it is in testing, Google expires the refresh tokens after about a week and every account has to be reconnected.
+- [ ] You decided how to handle verification. The app asks for full Drive access, which Google treats as a sensitive scope, so a public app may need to be verified. For personal or small use, an unverified published app works with a warning on the consent screen and a cap on users; check Google's current rules before relying on this.
+- [ ] If you use OneDrive, the Microsoft Entra app registration exists with the production redirect URI (see "OneDrive Setup").
+
+#### 4. Data and backups
+
+- [ ] A scheduled `mysqldump` runs (see "Database Backups"), and a restore was tried at least once on a copy.
+- [ ] `TOKEN_ENCRYPTION_KEY` is stored with the backups. Without it the restored Google tokens cannot be decrypted.
+- [ ] You took a backup right before the first deploy of a new version and before the first **Sync** on production: the sync creates the folders found in Drive and marks as deleted the mirrored folders that no longer exist there.
+
+#### 5. First deploy and smoke test
+
+- [ ] `docker compose up -d --build`, then `curl https://<your-domain>/api/health` (or the API domain) answers `{"status":"ok"}`. Migrations run on backend start.
+- [ ] Run the steps of "8. Manual Test Flow" above against the production URL, at least: register, connect Drive, upload, preview a PDF, download, share link and public link.
+- [ ] Deleting a folder removes it and its files from the provider permanently. Try that only on test data.
+
+#### 6. After a release
+
+- [ ] Rebuild the frontend when a `VITE_*` value changes.
+- [ ] Users who used the app before a frontend release may need one hard reload (Ctrl+Shift+R) so the service worker updates.
+- [ ] To roll back: check out the previous tag and run `docker compose up -d --build`. Migrations only move forward, so a schema change needs the database backup from the previous step.
+- [ ] Watch `docker compose logs -f backend` for the first minutes after the deploy.
+
+There is no CI in this repository: run `cd backend && npm run build` and `cd frontend && npm run build` before every deploy.
+
 ## Database Backups
 
 The app does not back up or restore its own database. Do it from the host with `mysqldump` (Docker Compose):
