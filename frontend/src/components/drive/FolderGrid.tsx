@@ -96,7 +96,7 @@ export function FolderGrid({
             <MoreVertical className="h-4 w-4" />
           </button>
           <FolderVisual folder={folder} className={cn('transition group-hover:scale-110', cfg.icon)} />
-          <h2 className={cn('line-clamp-2 text-center font-extrabold leading-tight', cfg.title)}>{folder.name}</h2>
+          <h2 className={cn('line-clamp-2 max-w-full text-center font-extrabold leading-tight [overflow-wrap:anywhere]', cfg.title)}>{folder.name}</h2>
           <p className={cn('line-clamp-1 text-center text-slate-500', cfg.sub)}>{folder.updated}</p>
         </Card>
       ))}

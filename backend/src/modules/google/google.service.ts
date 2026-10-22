@@ -119,42 +119,100 @@ type DriveFileMetadata = {
   takenAt: Date | null
 }
 
+const defaultFolderIconUrl = 'https://api.iconify.design/lucide:folder.svg'
+const driveParentsPerQuery = 40
+
+type DriveFolderNode = { id: string; name: string; parentId: string }
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size))
+  return chunks
+}
+
+// Breadth-first walk of the Drive folders under rootId, so every parent is listed before its children.
+async function listDriveFolderTree(drive: ReturnType<typeof google.drive>, rootId: string) {
+  const nodes: DriveFolderNode[] = []
+  const seen = new Set<string>([rootId])
+  let level = [rootId]
+  while (level.length > 0) {
+    const next: string[] = []
+    for (const parentIds of chunk(level, driveParentsPerQuery)) {
+      const parentsQuery = parentIds.map((id) => `'${id}' in parents`).join(' or ')
+      const q = `(${parentsQuery}) and mimeType = '${googleDriveFolderMimeType}' and trashed = false`
+      let pageToken: string | undefined
+      do {
+        const response = await drive.files.list({ q, spaces: 'drive', fields: 'nextPageToken,files(id,name,parents)', pageSize: 1000, pageToken })
+        for (const folder of response.data.files ?? []) {
+          if (!folder.id || !folder.name || seen.has(folder.id)) continue
+          seen.add(folder.id)
+          nodes.push({ id: folder.id, name: folder.name, parentId: folder.parents?.find((id) => parentIds.includes(id)) ?? parentIds[0] })
+          next.push(folder.id)
+        }
+        pageToken = response.data.nextPageToken ?? undefined
+      } while (pageToken)
+    }
+    level = next
+  }
+  return nodes
+}
+
 export async function syncGoogleAppFolderFiles(accountId: string, userId: string): Promise<GoogleAppFolderSyncResult> {
   const account = await prisma.connectedAccount.findFirstOrThrow({ where: { id: accountId, userId, provider: 'google_drive', status: 'connected' } })
   const auth = await getAuthedGoogleClient(account)
   const drive = google.drive({ version: 'v3', auth })
   const appFolderId = await ensureGoogleAppFolder(account)
 
-  const userFolders = await prisma.folder.findMany({
-    where: { userId, connectedAccountId: account.id, deletedAt: null },
-    select: { id: true, providerFolderId: true }
+  const driveFolders = await listDriveFolderTree(drive, appFolderId)
+  const knownFolders = await prisma.folder.findMany({ where: { userId, connectedAccountId: account.id, providerFolderId: { not: null } } })
+  const knownByProviderId = new Map(knownFolders.map((folder) => [folder.providerFolderId, folder]))
+  const folderIdMap = new Map<string, string>()
+
+  // Parents come before their children, so a folder's parent is already in folderIdMap.
+  for (const node of driveFolders) {
+    const parentDbId = node.parentId === appFolderId ? null : (folderIdMap.get(node.parentId) ?? null)
+    const known = knownByProviderId.get(node.id)
+    if (!known) {
+      const created = await prisma.folder.create({
+        data: { userId, connectedAccountId: account.id, provider: 'google_drive', providerFolderId: node.id, name: node.name, parentId: parentDbId, iconUrl: defaultFolderIconUrl },
+      })
+      folderIdMap.set(node.id, created.id)
+      continue
+    }
+    folderIdMap.set(node.id, known.id)
+    if (known.name !== node.name || known.parentId !== parentDbId || known.deletedAt !== null) {
+      await prisma.folder.update({ where: { id: known.id }, data: { name: node.name, parentId: parentDbId, deletedAt: null } })
+    }
+  }
+
+  // Folders mirrored from Drive that no longer exist there; app-only folders (no providerFolderId) are left alone.
+  const driveFolderIds = driveFolders.map((node) => node.id)
+  await prisma.folder.updateMany({
+    where: { userId, connectedAccountId: account.id, deletedAt: null, AND: [{ providerFolderId: { not: null } }, { providerFolderId: { notIn: driveFolderIds } }] },
+    data: { deletedAt: new Date() },
   })
-  const parentIds = [
-    appFolderId,
-    ...userFolders.map((f) => f.providerFolderId).filter((id): id is string => !!id)
-  ]
 
   const driveFiles: DriveFileMetadata[] = []
-  let pageToken: string | undefined
-
-  const parentsQuery = parentIds.map((id) => `'${id}' in parents`).join(' or ')
-  const q = `(${parentsQuery}) and mimeType != '${googleDriveFolderMimeType}' and trashed = false`
-
-  do {
-    const response = await drive.files.list({
-      q,
-      spaces: 'drive',
-      fields: 'nextPageToken,files(id,name,mimeType,size,parents,imageMediaMetadata(time))',
-      pageSize: 1000,
-      pageToken,
-    })
-    for (const file of response.data.files ?? []) {
-      if (!file.id || !file.name || !file.mimeType) continue
-      const parentId = file.parents?.[0] ?? appFolderId
-      driveFiles.push({ id: file.id, name: file.name, mimeType: file.mimeType, sizeBytes: BigInt(file.size ?? 0), parentId, takenAt: parseExifTime(file.imageMediaMetadata?.time) })
-    }
-    pageToken = response.data.nextPageToken ?? undefined
-  } while (pageToken)
+  for (const parentIds of chunk([appFolderId, ...driveFolderIds], driveParentsPerQuery)) {
+    const parentsQuery = parentIds.map((id) => `'${id}' in parents`).join(' or ')
+    const q = `(${parentsQuery}) and mimeType != '${googleDriveFolderMimeType}' and trashed = false`
+    let pageToken: string | undefined
+    do {
+      const response = await drive.files.list({
+        q,
+        spaces: 'drive',
+        fields: 'nextPageToken,files(id,name,mimeType,size,parents,imageMediaMetadata(time))',
+        pageSize: 1000,
+        pageToken,
+      })
+      for (const file of response.data.files ?? []) {
+        if (!file.id || !file.name || !file.mimeType) continue
+        const parentId = file.parents?.[0] ?? appFolderId
+        driveFiles.push({ id: file.id, name: file.name, mimeType: file.mimeType, sizeBytes: BigInt(file.size ?? 0), parentId, takenAt: parseExifTime(file.imageMediaMetadata?.time) })
+      }
+      pageToken = response.data.nextPageToken ?? undefined
+    } while (pageToken)
+  }
 
   const existingFiles = await prisma.file.findMany({ where: { userId, connectedAccountId: account.id, provider: 'google_drive' } })
   const existingByProviderId = new Map(existingFiles.map((file) => [file.providerFileId, file]))
@@ -162,8 +220,6 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
   let created = 0
   let updated = 0
   let deleted = 0
-
-  const folderIdMap = new Map(userFolders.map((f) => [f.providerFolderId, f.id]))
 
   for (const driveFile of driveFiles) {
     const dbFolderId = driveFile.parentId === appFolderId ? null : (folderIdMap.get(driveFile.parentId) ?? null)

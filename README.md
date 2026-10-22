@@ -617,7 +617,7 @@ http://localhost:5173
 7. Open `All Files`.
 8. Create nested virtual folders.
 9. Upload a file and confirm it appears under Google Drive root folder `MultiDrive`.
-10. Add or remove a file manually inside Google Drive folder `MultiDrive`, then click `Sync Drive` in All Files.
+10. Add or remove a file or a folder manually inside Google Drive folder `MultiDrive` (subfolders included), then click `Sync Drive` in All Files.
 11. Watch bottom-right upload progress.
 12. Right-click file row for actions:
 

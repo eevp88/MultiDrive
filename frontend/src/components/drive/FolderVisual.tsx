@@ -68,9 +68,11 @@ export function normalizeFolderColor(color?: string | null) {
   return legacyColorMap[color ?? ''] ?? defaultFolderColor
 }
 
+// The stored URLs use the `lucide:name.svg` form, which the Iconify API answers with 404; `lucide/name.svg` works.
 export function iconUrlWithColor(iconUrl: string, color: string) {
-  const separator = iconUrl.includes('?') ? '&' : '?'
-  return `${iconUrl}${separator}color=${encodeURIComponent(color)}`
+  const url = iconUrl.replace('api.iconify.design/lucide:', 'api.iconify.design/lucide/')
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}color=${encodeURIComponent(color)}`
 }
 
 export function FolderVisual({ folder, className, iconClassName }: { folder: Pick<FolderItem, 'color' | 'iconUrl'>; className?: string; iconClassName?: string }) {
