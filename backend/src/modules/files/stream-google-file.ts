@@ -1,5 +1,6 @@
 import type { Response } from 'express'
 import type { ConnectedAccount, File } from '@prisma/client'
+import { contentDisposition } from '../../utils/content-disposition.js'
 import { getAuthedGoogleClient } from '../google/google.service.js'
 
 type FileWithAccount = File & { connectedAccount: ConnectedAccount }
@@ -17,9 +18,7 @@ const googlePreviewExportMimeTypes: Record<string, { mimeType: string; extension
   'application/vnd.google-apps.spreadsheet': { mimeType: 'application/pdf', extension: '.pdf' },
 }
 
-export function contentDisposition(type: 'inline' | 'attachment', fileName: string) {
-  return `${type}; filename="${fileName.replaceAll('"', '')}"`
-}
+export { contentDisposition }
 
 export function withExtension(fileName: string, extension: string) {
   return fileName.toLowerCase().endsWith(extension) ? fileName : `${fileName}${extension}`
