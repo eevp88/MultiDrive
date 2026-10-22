@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type MouseEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Archive, CheckCircle, ClipboardPaste, Download, FolderInput, FolderPlus, LayoutGrid, List, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react'
+import { CheckCircle, ClipboardPaste, Download, FolderInput, FolderPlus, LayoutGrid, List, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DummyModal } from '@/components/drive/DummyModal'
@@ -10,7 +10,7 @@ import { FileDetailsDrawer } from '@/components/drive/FileDetailsDrawer'
 import { FileGrid } from '@/components/drive/FileGrid'
 import { FileTable } from '@/components/drive/FileTable'
 import { FolderContextMenu } from '@/components/drive/FolderContextMenu'
-import { FolderGrid, type FolderSizeScale } from '@/components/drive/FolderGrid'
+import type { FolderSizeScale } from '@/components/drive/FolderGrid'
 import { defaultFolderColor, defaultFolderIconUrl, folderColorOptions, folderIconOptions, iconUrlWithColor, normalizeFolderColor } from '@/components/drive/FolderVisual'
 import { PageHeader } from '@/components/drive/PageHeader'
 import { Input } from '@/components/ui/input'
@@ -772,8 +772,6 @@ export function AllFilesPage() {
   }, [syncingDrive, folderSizeScale, t])
 
 
-  const recentFolders = folders.slice(0, 4)
-  const moreFolders = folders.slice(4)
   const activeFolder = allFolders.find((folder) => folder.id === activeFolderId)
   const folderBreadcrumbs = (() => {
     if (!activeFolder) return []
@@ -788,7 +786,7 @@ export function AllFilesPage() {
     }
     return path
   })()
-  const visibleFolderRows = fileViewMode === 'list' && !searchQuery ? folders : []
+  const visibleFolderRows = searchQuery ? [] : folders
   const selectedCount = selectedFileIds.size + selectedFolderIds.size
   const allVisibleSelected = (files.length > 0 || visibleFolderRows.length > 0) && files.every((file) => file.id && selectedFileIds.has(file.id)) && visibleFolderRows.every((folder) => folder.id && selectedFolderIds.has(folder.id))
   const activePreviewKind = getPreviewKind(activeFile?.mimeType)
@@ -809,28 +807,19 @@ export function AllFilesPage() {
         </div>
       </div>
       {message ? <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p> : null}
-      {fileViewMode === 'grid' && !activeFolder && (recentFolders.length > 0 ? <FolderGrid items={recentFolders} mobileTwoColumns sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} /> : <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{t('files.noFolders')}</p>)}
-      {fileViewMode === 'grid' && !activeFolder && moreFolders.length > 0 ? <>
-        <h2 className="mt-4 font-extrabold text-slate-700">{t('files.moreFolders')}</h2>
-        <FolderGrid items={moreFolders} sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} />
-      </> : null}
-      {fileViewMode === 'grid' && activeFolder && folders.length > 0 ? <>
-        <h2 className="mt-4 font-extrabold text-slate-700">{t('files.folders')}</h2>
-        <FolderGrid items={folders} sizeScale={folderSizeScale} onFolderMenu={openFolderMenu} onFolderOpen={openFolder} onDropItem={handleDropItem} />
-      </> : null}
       <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3"><Button variant="soft" className="hidden sm:inline-flex"><Archive className="h-4 w-4" />{t('files.recents')}</Button><Button variant="soft" className="hidden sm:inline-flex"><Star className="h-4 w-4" />{t('nav.starred')}</Button>{selectedCount > 0 ? <div className="flex w-full flex-col gap-3 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0"><span className="text-sm font-extrabold text-slate-700">{t('files.selected', { count: selectedCount })}</span><div className="grid grid-cols-4 gap-2 sm:flex sm:gap-3"><Button className="w-full" variant="outline" disabled={selectedFileIds.size === 0} onClick={downloadBatchAsZip}><Download className="h-4 w-4" />{t('files.zip')}</Button><Button className="w-full" variant="outline" onClick={() => setMoveOpen(true)}><FolderInput className="h-4 w-4" />{t('table.move')}</Button><Button className="w-full" variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 className="h-4 w-4" />{t('action.delete')}</Button><Button className="w-full" variant="ghost" onClick={clearSelection}>{t('files.clear')}</Button></div></div> : null}</div>
+        <div className="flex flex-wrap items-center gap-3">{selectedCount > 0 ? <div className="flex w-full flex-col gap-3 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 sm:w-auto sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0"><span className="text-sm font-extrabold text-slate-700">{t('files.selected', { count: selectedCount })}</span><div className="grid grid-cols-4 gap-2 sm:flex sm:gap-3"><Button className="w-full" variant="outline" disabled={selectedFileIds.size === 0} onClick={downloadBatchAsZip}><Download className="h-4 w-4" />{t('files.zip')}</Button><Button className="w-full" variant="outline" onClick={() => setMoveOpen(true)}><FolderInput className="h-4 w-4" />{t('table.move')}</Button><Button className="w-full" variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 className="h-4 w-4" />{t('action.delete')}</Button><Button className="w-full" variant="ghost" onClick={clearSelection}>{t('files.clear')}</Button></div></div> : null}</div>
         <div className="flex gap-3"><Button variant={fileViewMode === 'grid' ? 'soft' : 'outline'} size="icon" aria-label={t('files.viewGrid')} aria-pressed={fileViewMode === 'grid'} onClick={() => changeFileViewMode('grid')}><LayoutGrid className="h-5 w-5" /></Button><Button variant={fileViewMode === 'list' ? 'soft' : 'outline'} size="icon" aria-label={t('files.viewList')} aria-pressed={fileViewMode === 'list'} onClick={() => changeFileViewMode('list')}><List className="h-5 w-5" /></Button></div>
       </div>
       {cutFolder ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-700"><ClipboardPaste className="mr-2 inline h-4 w-4" />{t('files.cutNotice', { name: cutFolder.name })}</p> : null}
-      {files.length === 0 && (fileViewMode === 'grid' || folders.length === 0) ? (
+      {files.length === 0 && visibleFolderRows.length === 0 ? (
         <Card className="mt-3 p-5 bg-white/10 backdrop-blur-sm border border-white/20 dark:bg-transparent dark:border-0 dark:p-0 dark:shadow-none">
           <p className="text-sm text-slate-500">{searchQuery ? t('files.emptySearch', { query: searchQuery }) : activeFolder ? t('files.emptyFolder') : t('files.emptyAll')}</p>
         </Card>
       ) : (
         <Card className="mt-3 p-4 sm:p-5 bg-white/10 backdrop-blur-sm border border-white/20 dark:bg-transparent dark:border-0 dark:p-0 dark:shadow-none">
           {fileViewMode === 'grid' ? (
-            <FileGrid files={files} selectedFileIds={selectedFileIds} sizeScale={folderSizeScale} onToggleFile={toggleFileSelection} onFileContextMenu={openContext} />
+            <FileGrid files={files} folders={visibleFolderRows} selectedFileIds={selectedFileIds} selectedFolderIds={selectedFolderIds} sizeScale={folderSizeScale} onToggleFile={toggleFileSelection} onToggleFolder={toggleFolderSelection} onFileContextMenu={openContext} onFolderOpen={openFolder} onFolderMenu={openFolderMenu} onDropItem={handleDropItem} />
           ) : (
             <FileTable files={files} folders={visibleFolderRows} selectedFileIds={selectedFileIds} selectedFolderIds={selectedFolderIds} allSelected={allVisibleSelected} onToggleFile={toggleFileSelection} onToggleFolder={toggleFolderSelection} onToggleAll={toggleAllVisibleFiles} onRowClick={handleRowClick} onFileContextMenu={openContext} onFolderOpen={openFolder} onFolderMenu={openFolderMenu} onDropItem={handleDropItem} />
           )}

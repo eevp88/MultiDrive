@@ -3,29 +3,14 @@ import { type MouseEvent, useState } from 'react'
 import { AvatarStack } from '@/components/drive/AvatarStack'
 import { FileIcon } from '@/components/drive/FileIcon'
 import { FolderVisual } from '@/components/drive/FolderVisual'
+import { folderDropHandlers } from '@/components/drive/folder-drop'
 import type { FileItem, FolderItem } from '@/data/drive-data'
 import { apiFetch } from '@/lib/api'
 import { useI18n } from '@/i18n/I18nProvider'
 
-const dropHighlightClasses = ['bg-blue-50/50', 'border-blue-300']
-
 export function FileTable({ files, folders = [], mode = 'default', selectedFileIds = new Set<string>(), selectedFolderIds = new Set<string>(), allSelected = false, onFileContextMenu, onToggleFile, onToggleFolder, onToggleAll, onRowClick, onFolderOpen, onFolderMenu, onDropItem }: { files: FileItem[]; folders?: FolderItem[]; mode?: 'default' | 'shared' | 'recent' | 'starred' | 'archived'; selectedFileIds?: Set<string>; selectedFolderIds?: Set<string>; allSelected?: boolean; onFileContextMenu?: (event: MouseEvent<HTMLElement>, file: FileItem) => void; onToggleFile?: (file: FileItem) => void; onToggleFolder?: (folder: FolderItem) => void; onToggleAll?: () => void; onRowClick?: (item: { type: 'file' | 'folder'; id?: string }, event: MouseEvent<HTMLElement>) => void; onFolderOpen?: (folder: FolderItem) => void; onFolderMenu?: (event: MouseEvent<HTMLElement>, folder: FolderItem) => void; onDropItem?: (fileId: string, folderId: string) => void }) {
   const { t } = useI18n()
   const [copiedFileId, setCopiedFileId] = useState<string | null>(null)
-
-  function folderDropHandlers(folder: FolderItem) {
-    return {
-      onDragOver: (event: React.DragEvent<HTMLElement>) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' },
-      onDragEnter: (event: React.DragEvent<HTMLElement>) => { event.currentTarget.classList.add(...dropHighlightClasses) },
-      onDragLeave: (event: React.DragEvent<HTMLElement>) => { event.currentTarget.classList.remove(...dropHighlightClasses) },
-      onDrop: (event: React.DragEvent<HTMLElement>) => {
-        event.preventDefault()
-        event.currentTarget.classList.remove(...dropHighlightClasses)
-        const fileId = event.dataTransfer.getData('text/plain')
-        if (fileId && folder.id) onDropItem?.(fileId, folder.id)
-      },
-    }
-  }
 
   return (
     <div className="mt-4">
@@ -38,7 +23,7 @@ export function FileTable({ files, folders = [], mode = 'default', selectedFileI
           </label>
         ) : null}
         {folders.map((folder) => (
-          <article key={`folder-${folder.id ?? folder.name}`} onClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder)} className={selectedFolderIds.has(folder.id ?? '') ? 'cursor-pointer overflow-hidden rounded-2xl border file-selected p-3.5 shadow-sm' : 'cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm'}>
+          <article key={`folder-${folder.id ?? folder.name}`} onClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder, onDropItem)} className={selectedFolderIds.has(folder.id ?? '') ? 'cursor-pointer overflow-hidden rounded-2xl border file-selected p-3.5 shadow-sm' : 'cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm'}>
             <div className="flex items-center gap-3">
               {onToggleFolder ? <input type="checkbox" className="h-4 w-4 shrink-0 accent-blue-600" checked={selectedFolderIds.has(folder.id ?? '')} onChange={() => onToggleFolder(folder)} onClick={(event) => event.stopPropagation()} /> : null}
               <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
@@ -93,7 +78,7 @@ export function FileTable({ files, folders = [], mode = 'default', selectedFileI
           </thead>
           <tbody>
             {folders.map((folder) => (
-              <tr key={`folder-${folder.id ?? folder.name}`} onClick={(event) => (onRowClick ? onRowClick({ type: 'folder', id: folder.id }, event) : onToggleFolder?.(folder))} onDoubleClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder)} className={selectedFolderIds.has(folder.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-pointer select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-pointer select-none'}>
+              <tr key={`folder-${folder.id ?? folder.name}`} onClick={(event) => (onRowClick ? onRowClick({ type: 'folder', id: folder.id }, event) : onToggleFolder?.(folder))} onDoubleClick={() => onFolderOpen?.(folder)} onContextMenu={(event) => onFolderMenu?.(event, folder)} {...folderDropHandlers(folder, onDropItem)} className={selectedFolderIds.has(folder.id ?? '') ? 'group border-b file-selected transition hover:bg-orange-500/15 cursor-pointer select-none' : 'group border-b border-slate-200/10 transition hover:bg-slate-100 cursor-pointer select-none'}>
                 <td className="py-2.5 font-semibold">
                   <span className="flex min-w-0 items-center gap-2.5">
                     <FolderVisual folder={folder} className="h-5 w-5 shrink-0" />
