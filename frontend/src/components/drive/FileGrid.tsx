@@ -115,7 +115,7 @@ export function FileGrid({
 
             <div className="flex justify-center mt-2">
               <div className={cn("flex items-center justify-center rounded-2xl bg-slate-100 text-slate-700", cfg.iconShell)}>
-                <FileIcon kind={file.kind} className={cfg.icon} />
+                <FileIcon kind={file.kind} mimeType={file.mimeType} name={file.name} className={cfg.icon} />
               </div>
             </div>
 
