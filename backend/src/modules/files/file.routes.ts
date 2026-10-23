@@ -183,7 +183,7 @@ fileRouter.post('/batch/restore', async (req: AuthRequest, res, next) => {
     const files = await prisma.file.findMany({ where: { id: { in: body.fileIds }, userId: req.user!.id, status: 'deleted' } })
     const result = await prisma.file.updateMany({
       where: { id: { in: body.fileIds }, userId: req.user!.id, status: 'deleted' },
-      data: { status: 'active', deletedAt: null }
+      data: { status: 'active', deletedAt: null, deletedBySync: false }
     })
     // A file whose folder was deleted meanwhile would come back invisible: put it at the root instead.
     const folderIds = [...new Set(files.map((file) => file.folderId).filter((id): id is string => Boolean(id)))]

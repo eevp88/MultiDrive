@@ -231,8 +231,8 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
   let updated = 0
   let deleted = 0
 
-  // The sync never changes status or deletedAt of a file it already knows: a file the user trashed in the app is still in
-  // Drive and must stay in the trash until it is restored there.
+  // A file the user trashed in the app is still in Drive and stays in the trash until it is restored there. Only a file this
+  // sync itself marked as deleted (deletedBySync) because it had disappeared comes back when it reappears.
   for (const driveFile of driveFiles) {
     const dbFolderId = driveFile.parentId === appFolderId ? null : (folderIdMap.get(driveFile.parentId) ?? null)
     const existing = existingByProviderId.get(driveFile.id)
@@ -244,11 +244,12 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
       continue
     }
 
-    const needsUpdate = existing.name !== driveFile.name || existing.mimeType !== driveFile.mimeType || existing.sizeBytes !== driveFile.sizeBytes || existing.folderId !== dbFolderId || (existing.takenAt?.getTime() ?? null) !== (driveFile.takenAt?.getTime() ?? null)
+    const reappeared = existing.status !== 'active' && existing.deletedBySync
+    const needsUpdate = reappeared || existing.name !== driveFile.name || existing.mimeType !== driveFile.mimeType || existing.sizeBytes !== driveFile.sizeBytes || existing.folderId !== dbFolderId || (existing.takenAt?.getTime() ?? null) !== (driveFile.takenAt?.getTime() ?? null)
     if (needsUpdate) {
       await prisma.file.update({
         where: { id: existing.id },
-        data: { name: driveFile.name, mimeType: driveFile.mimeType, sizeBytes: driveFile.sizeBytes, takenAt: driveFile.takenAt, folderId: dbFolderId },
+        data: { name: driveFile.name, mimeType: driveFile.mimeType, sizeBytes: driveFile.sizeBytes, takenAt: driveFile.takenAt, folderId: dbFolderId, ...(reappeared ? { status: 'active', deletedAt: null, deletedBySync: false } : {}) },
       })
       updated += 1
     }
@@ -256,7 +257,7 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
 
   const missingActiveIds = existingFiles.filter((file) => file.status === 'active' && !driveFileIds.has(file.providerFileId)).map((file) => file.id)
   if (missingActiveIds.length > 0) {
-    const result = await prisma.file.updateMany({ where: { id: { in: missingActiveIds }, userId }, data: { status: 'deleted', deletedAt: new Date() } })
+    const result = await prisma.file.updateMany({ where: { id: { in: missingActiveIds }, userId }, data: { status: 'deleted', deletedAt: new Date(), deletedBySync: true } })
     deleted = result.count
   }
 

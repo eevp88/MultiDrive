@@ -715,9 +715,15 @@ export function AllFilesPage() {
 
   async function deleteFolder() {
     if (!activeFolderForMenu?.id) return
-    await apiFetch(`/folders/${activeFolderForMenu.id}`, { method: 'DELETE' })
+    try {
+      await apiFetch(`/folders/${activeFolderForMenu.id}`, { method: 'DELETE' })
+      setMessage('')
+    } catch (error) {
+      setMessage(translateError(error, 'files.failedDelete'))
+    }
     setFolderDeleteOpen(false)
-    await loadFolders()
+    await Promise.all([loadFiles(), loadFolders()]).catch(() => undefined)
+    window.dispatchEvent(new Event('multidrive:storage-changed'))
   }
 
   function cutSelectedFolder(folder: FolderItem | null) {
