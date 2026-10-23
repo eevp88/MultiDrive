@@ -18,6 +18,8 @@ export type FileItem = {
   access: string
   accountEmail?: string
   accountProvider?: string
+  // The provider id of the account (`google_drive`, `onedrive`, `s3`); accountProvider is only its display name.
+  provider?: string
   createdAt?: string
   kind: 'doc' | 'image' | 'video' | 'pdf'
   shared: number
