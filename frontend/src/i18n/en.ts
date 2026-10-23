@@ -48,6 +48,10 @@ export const en = {
   'error.MICROSOFT_NOT_CONFIGURED': 'OneDrive is not set up on this server yet. Ask the administrator to add the Microsoft app credentials.',
   'error.MICROSOFT_FILE_STREAM_FAILED': 'OneDrive could not provide this file.',
   'error.FILE_NAME_CONFLICT': 'A file with that name already exists in the same storage account.',
+  'error.GOOGLE_FILE_STREAM_FAILED': 'Google Drive could not stream this file. Try again later.',
+  'error.GOOGLE_FILE_NOT_FOUND': 'The file no longer exists in Google Drive. Run Sync to update the list.',
+  'error.UPLOAD_SESSION_EXPIRED': 'The upload session expired. Start the upload again.',
+  'error.UPLOAD_FAILED': 'Google Drive rejected the upload. Try again later.',
   'error.GOOGLE_API_ERROR': 'Google Drive rejected the request. Try again later.',
   'error.INTERNAL_SERVER_ERROR': 'Something went wrong on the server. Try again later.',
 

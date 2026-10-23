@@ -2,7 +2,7 @@ import { google } from 'googleapis'
 import type { ConnectedAccount, ProviderConfig } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { decryptText, encryptText } from '../../utils/crypto.js'
-import { HttpError } from '../../utils/http-error.js'
+import { HttpError, describeError } from '../../utils/http-error.js'
 import { parseExifTime } from '../../utils/exif-time.js'
 
 const googleDriveFolderMimeType = 'application/vnd.google-apps.folder'
@@ -12,6 +12,21 @@ const legacyAppFolderName = '9drive'
 
 export function createOAuthClient(config: ProviderConfig) {
   return new google.auth.OAuth2(decryptText(config.clientIdEncrypted), decryptText(config.clientSecretEncrypted), config.redirectUri)
+}
+
+// invalid_grant means the refresh token was revoked or expired (Google expires them after about a week while the OAuth app is
+// in testing mode): the user has to connect the account again. Any other failure is Google's, not the user's.
+async function refreshGoogleCredentials(client: ReturnType<typeof createOAuthClient>) {
+  try {
+    return (await client.refreshAccessToken()).credentials
+  } catch (error) {
+    const detail = error as { message?: unknown; response?: { data?: { error?: unknown } } } | null
+    console.error('Google token refresh failed:', describeError(error))
+    if (detail?.response?.data?.error === 'invalid_grant' || (typeof detail?.message === 'string' && detail.message.includes('invalid_grant'))) {
+      throw new HttpError(409, 'ACCOUNT_RECONNECT_REQUIRED', 'Google account tokens are no longer valid.')
+    }
+    throw new HttpError(502, 'GOOGLE_API_ERROR', 'Google rejected the sign-in request.')
+  }
 }
 
 export async function getAuthedGoogleClient(account: ConnectedAccount) {
@@ -26,8 +41,7 @@ export async function getAuthedGoogleClient(account: ConnectedAccount) {
   })
 
   if (account.tokenExpiresAt.getTime() < Date.now() + 60_000) {
-    const result = await client.refreshAccessToken()
-    const credentials = result.credentials
+    const credentials = await refreshGoogleCredentials(client)
     if (credentials.access_token) {
       await prisma.connectedAccount.update({
         where: { id: account.id },

@@ -50,6 +50,10 @@ export const es: Messages = {
   'error.MICROSOFT_NOT_CONFIGURED': 'OneDrive aún no está configurado en este servidor. Pide al administrador que agregue las credenciales de la app de Microsoft.',
   'error.MICROSOFT_FILE_STREAM_FAILED': 'OneDrive no pudo entregar este archivo.',
   'error.FILE_NAME_CONFLICT': 'Ya existe un archivo con ese nombre en la misma cuenta de almacenamiento.',
+  'error.GOOGLE_FILE_STREAM_FAILED': 'Google Drive no pudo enviar este archivo. Inténtalo más tarde.',
+  'error.GOOGLE_FILE_NOT_FOUND': 'El archivo ya no existe en Google Drive. Ejecuta Sincronizar para actualizar la lista.',
+  'error.UPLOAD_SESSION_EXPIRED': 'La sesión de subida expiró. Inicia la subida de nuevo.',
+  'error.UPLOAD_FAILED': 'Google Drive rechazó la subida. Inténtalo más tarde.',
   'error.GOOGLE_API_ERROR': 'Google Drive rechazó la solicitud. Inténtalo más tarde.',
   'error.INTERNAL_SERVER_ERROR': 'Algo falló en el servidor. Inténtalo más tarde.',
 
