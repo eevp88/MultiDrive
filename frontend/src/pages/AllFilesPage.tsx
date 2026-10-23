@@ -129,6 +129,8 @@ export function AllFilesPage() {
   const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: FolderItem | null }>({ x: 0, y: 0, folder: null })
   const [emptyContextMenu, setEmptyContextMenu] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
   const [message, setMessage] = useState('')
+  const [isPageDragging, setIsPageDragging] = useState(false)
+  const pageDragDepth = useRef(0)
   const [gdrivePublicUrl, setGdrivePublicUrl] = useState('')
   const [makingPublic, setMakingPublic] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -377,6 +379,45 @@ export function AllFilesPage() {
     if (event.type === 'dragenter' || event.type === 'dragover') setIsUploadDragging(true)
     if (event.type === 'dragleave' || event.type === 'drop') setIsUploadDragging(false)
     if (event.type === 'drop') selectUploadFiles(event.dataTransfer.files)
+  }
+
+  // Files dragged in from the computer (the move-to-folder drag carries text, not Files) upload straight to the folder being viewed.
+  const hasDraggedFiles = (event: DragEvent<HTMLElement>) => Array.from(event.dataTransfer.types).includes('Files')
+
+  const pageDropHandlers = {
+    onDragEnter: (event: DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event)) return
+      event.preventDefault()
+      pageDragDepth.current += 1
+      setIsPageDragging(true)
+    },
+    onDragOver: (event: DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+    },
+    onDragLeave: (event: DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event)) return
+      pageDragDepth.current = Math.max(0, pageDragDepth.current - 1)
+      if (pageDragDepth.current === 0) setIsPageDragging(false)
+    },
+    onDrop: (event: DragEvent<HTMLElement>) => {
+      if (!hasDraggedFiles(event)) return
+      event.preventDefault()
+      pageDragDepth.current = 0
+      setIsPageDragging(false)
+      // Read the items now: the browser clears them once the handler returns. A dropped folder shows up as a file entry, so it is told apart here.
+      const dropped: File[] = []
+      let skippedFolder = false
+      for (const item of Array.from(event.dataTransfer.items)) {
+        if (item.kind !== 'file') continue
+        if (item.webkitGetAsEntry?.()?.isDirectory) { skippedFolder = true; continue }
+        const file = item.getAsFile()
+        if (file) dropped.push(file)
+      }
+      setMessage(skippedFolder ? t('files.dropFoldersUnsupported') : '')
+      uploadFiles(dropped, activeFolderId).catch((err) => console.error('Upload failed:', err))
+    },
   }
 
 
@@ -827,7 +868,8 @@ export function AllFilesPage() {
 
   return (
     <>
-      <div onContextMenu={openEmptyContextMenu} className="min-h-[620px] w-full min-w-0">
+      <div onContextMenu={openEmptyContextMenu} {...pageDropHandlers} className="relative min-h-[620px] w-full min-w-0">
+      {isPageDragging ? <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-2xl border-2 border-dashed border-blue-500 bg-blue-500/10 backdrop-blur-[1px]"><span className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-extrabold text-slate-950 shadow-lg"><Upload className="h-4 w-4 text-blue-600" />{activeFolder ? t('files.dropToUploadIn', { name: activeFolder.name }) : t('files.dropToUpload')}</span></div> : null}
       <PageHeader title={activeFolder ? <span className="block min-w-0 truncate"><button className="text-blue-600 hover:underline" onClick={closeFolder}>{t('nav.allFiles')}</button>{folderBreadcrumbs.map((folder, index) => <span key={folder.id}><span className="text-slate-400"> / </span>{index === folderBreadcrumbs.length - 1 ? <span>{folder.name}</span> : <button className="text-blue-600 hover:underline" onClick={() => folder.id && openFolderById(folder.id)}>{folder.name}</button>}</span>)}</span> : t('nav.allFiles')} />
       {/* Action buttons row — visible on mobile/tablet, hidden on desktop (desktop uses header slot) */}
       <div className="mt-4 flex flex-wrap items-center gap-2 lg:hidden">
@@ -866,17 +908,17 @@ export function AllFilesPage() {
       <FileDetailsDrawer open={detailOpen} file={activeFile} onClose={() => setDetailOpen(false)} />
 
       <DummyModal open={uploadOpen} title={t('areaMenu.upload')} description={t('files.uploadDesc')} onClose={() => setUploadOpen(false)}>
-        <form onSubmit={uploadFile} className="grid gap-4">
+        <form onSubmit={uploadFile} className="grid grid-cols-1 gap-4">
            <label onDragEnter={handleUploadDrag} onDragOver={handleUploadDrag} onDragLeave={handleUploadDrag} onDrop={handleUploadDrag} className={isUploadDragging ? 'grid cursor-pointer gap-3 rounded-2xl border-2 border-dashed border-blue-500 bg-blue-50 p-4 text-center transition sm:p-6' : 'grid cursor-pointer gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-4 text-center transition hover:border-blue-300 hover:bg-blue-50/50 sm:p-6'}>
             <Upload className={isUploadDragging ? 'mx-auto h-8 w-8 text-blue-600' : 'mx-auto h-8 w-8 text-slate-500'} />
             <span className="text-sm font-extrabold text-slate-950">{t('files.dropHere')}</span>
             <span className="text-xs text-slate-500">{t('files.uploadHint')}</span>
-            <Input type="file" className="sr-only" multiple onChange={(event) => selectUploadFiles(event.target.files)} required={selectedFiles.length === 0} />
+            <Input type="file" className="sr-only h-px w-px" multiple onChange={(event) => selectUploadFiles(event.target.files)} required={selectedFiles.length === 0} />
           </label>
           <label className="grid gap-2 text-sm font-semibold">
             {t('files.targetAccount')}
             <select
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm bg-white"
+              className="h-11 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-sm bg-white"
               value={selectedTargetAccountId}
               onChange={(event) => setSelectedTargetAccountId(event.target.value)}
             >
@@ -888,7 +930,7 @@ export function AllFilesPage() {
               ))}
             </select>
           </label>
-          {activeFolder ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{t('files.uploadingTo')} <b>{activeFolder.name}</b></p> : <label className="grid gap-2 text-sm font-semibold">{t('details.folder')}<select className="h-11 rounded-xl border border-slate-200 px-3 text-sm bg-white" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">{t('details.noFolder')}</option>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
+          {activeFolder ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{t('files.uploadingTo')} <b>{activeFolder.name}</b></p> : <label className="grid gap-2 text-sm font-semibold">{t('details.folder')}<select className="h-11 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-sm bg-white" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">{t('details.noFolder')}</option>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
           {selectedFiles.length > 0 ? <div className="grid max-h-56 gap-2 overflow-y-auto rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><div className="flex items-center justify-between gap-3"><span className="font-bold text-slate-950">{t('files.selected', { count: selectedFiles.length })}</span><span className="shrink-0">{formatBytes(selectedFiles.reduce((total, file) => total + file.size, 0))}</span></div>{selectedFiles.map((file, index) => <div key={`${file.name}-${file.size}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><span className="min-w-0 flex-1 truncate" title={file.name}>{file.name}</span><span className="shrink-0 text-xs text-slate-500">{formatBytes(file.size)}</span><button type="button" className="shrink-0 text-slate-500 hover:text-red-600" onClick={() => removeUploadFile(index)} aria-label={t('files.removeFile', { name: file.name })}><X className="h-4 w-4" /></button></div>)}</div> : null}
           <div className="grid gap-3 sm:flex sm:justify-end"><Button type="button" variant="outline" onClick={() => setUploadOpen(false)}>{t('common.cancel')}</Button><Button disabled={loading || selectedFiles.length === 0}>{loading ? t('files.uploading') : selectedFiles.length > 1 ? t('files.uploadN', { count: selectedFiles.length }) : t('files.upload')}</Button></div>
         </form>
