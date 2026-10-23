@@ -4,7 +4,7 @@ import type { ConnectedAccount, File, S3StorageConfig } from '@prisma/client'
 import type { Response } from 'express'
 import type { Readable } from 'node:stream'
 import { prisma } from '../../config/prisma.js'
-import { contentDisposition } from '../../utils/content-disposition.js'
+import { contentDisposition, effectiveDisposition } from '../../utils/content-disposition.js'
 import { decryptText } from '../../utils/crypto.js'
 
 type S3Config = S3StorageConfig
@@ -91,7 +91,7 @@ export async function streamS3File(file: FileWithAccount, range: string | undefi
   res.status(response.ContentRange ? 206 : 200)
   res.setHeader('Content-Type', response.ContentType ?? file.mimeType)
   res.setHeader('Accept-Ranges', 'bytes')
-  if (options.disposition) res.setHeader('Content-Disposition', contentDisposition(options.disposition, file.name))
+  if (options.disposition) res.setHeader('Content-Disposition', contentDisposition(effectiveDisposition(options.disposition, response.ContentType ?? file.mimeType), file.name))
   if (response.ContentLength !== undefined) res.setHeader('Content-Length', response.ContentLength.toString())
   if (response.ContentRange) res.setHeader('Content-Range', response.ContentRange)
 

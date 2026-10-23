@@ -3,7 +3,7 @@ import { pipeline } from 'node:stream/promises'
 import type { Response } from 'express'
 import type { ConnectedAccount, File } from '@prisma/client'
 import { fetchMicrosoftFileContent } from '../microsoft/microsoft.service.js'
-import { contentDisposition } from './stream-google-file.js'
+import { contentDisposition, effectiveDisposition } from '../../utils/content-disposition.js'
 
 type FileWithAccount = File & { connectedAccount: ConnectedAccount }
 type StreamOptions = { disposition?: 'inline' | 'attachment' }
@@ -22,7 +22,7 @@ export async function streamMicrosoftFile(file: FileWithAccount, range: string |
   res.status(response.status)
   res.setHeader('Content-Type', file.mimeType)
   res.setHeader('Accept-Ranges', 'bytes')
-  if (options.disposition) res.setHeader('Content-Disposition', contentDisposition(options.disposition, file.name))
+  if (options.disposition) res.setHeader('Content-Disposition', contentDisposition(effectiveDisposition(options.disposition, file.mimeType), file.name))
   const contentLength = response.headers.get('content-length')
   const contentRange = response.headers.get('content-range')
   if (contentLength) res.setHeader('Content-Length', contentLength)
