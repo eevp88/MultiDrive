@@ -108,6 +108,16 @@ async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByA
     })[0]?.account
 }
 
+// Sizes arrive as text and BigInt() throws on anything that is not a whole number.
+const sizeBytesPattern = /^\d{1,15}$/
+const batchMetaSchema = z.array(z.object({
+  fieldName: z.string().min(1),
+  fileName: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.union([z.string(), z.number()]).refine((value) => sizeBytesPattern.test(String(value)), 'sizeBytes must be a whole number.'),
+  folderId: z.string().optional(),
+})).max(25)
+
 export async function handleUpload(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     logUpload('request started', { userId: req.user!.id, contentLength: req.headers['content-length'] })
@@ -132,13 +142,13 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
       return res.status(status).json({ code, message })
     }
 
-    const parseBatchMeta = (value: string) => JSON.parse(value).map((item: { fieldName: string; fileName: string; mimeType: string; sizeBytes: string | number; folderId?: string }) => ({
+    const parseBatchMeta = (value: string): UploadMeta[] => batchMetaSchema.parse(JSON.parse(value)).map((item) => ({
       fieldName: item.fieldName,
       fileName: item.fileName,
       mimeType: item.mimeType,
       sizeBytes: BigInt(item.sizeBytes),
       folderId: item.folderId,
-    })) as UploadMeta[]
+    }))
 
     const metaForFile = (fieldName: string, info: { filename: string; mimeType: string }) => {
       if (batchMeta) return batchMeta.find((item) => item.fieldName === fieldName)
@@ -268,11 +278,19 @@ export async function handleUpload(req: AuthRequest, res: Response, next: NextFu
     }
 
     busboy.on('field', (name, value) => {
-      if (name === 'sizeBytes') fields.sizeBytes = BigInt(value)
-      if (name === 'fileName') fields.fileName = value
-      if (name === 'mimeType') fields.mimeType = value
-      if (name === 'folderId') fields.folderId = value
-      if (name === 'filesMeta') batchMeta = parseBatchMeta(value)
+      // This runs from an event, outside the route's try/catch: an exception here would be uncaught and stop the whole process.
+      try {
+        if (name === 'sizeBytes') {
+          if (!sizeBytesPattern.test(value)) throw new HttpError(400, 'UPLOAD_MALFORMED', 'sizeBytes must be a whole number.')
+          fields.sizeBytes = BigInt(value)
+        }
+        if (name === 'fileName') fields.fileName = value
+        if (name === 'mimeType') fields.mimeType = value
+        if (name === 'folderId') fields.folderId = value
+        if (name === 'filesMeta') batchMeta = parseBatchMeta(value)
+      } catch {
+        void fail(400, 'UPLOAD_MALFORMED', 'Malformed upload fields.')
+      }
     })
 
     busboy.on('file', (name, fileStream, info) => {
@@ -316,7 +334,7 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
     const body = z.object({
       fileName: z.string().min(1),
       mimeType: z.string().min(1),
-      sizeBytes: z.string(),
+      sizeBytes: z.string().regex(sizeBytesPattern, 'sizeBytes must be a whole number.'),
       folderId: z.string().nullable().optional(),
       targetAccountId: z.string().nullable().optional()
     }).parse(req.body)

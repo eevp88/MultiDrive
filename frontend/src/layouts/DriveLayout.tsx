@@ -325,11 +325,11 @@ export function DriveLayout() {
     if (filterAccountId) nextParams.set('accountId', filterAccountId)
 
     if (filterMinSize) {
-      const bytes = Number(filterMinSize) * 1024 * 1024
+      const bytes = Math.round(Number(filterMinSize) * 1024 * 1024)
       if (!isNaN(bytes)) nextParams.set('minSize', String(bytes))
     }
     if (filterMaxSize) {
-      const bytes = Number(filterMaxSize) * 1024 * 1024
+      const bytes = Math.round(Number(filterMaxSize) * 1024 * 1024)
       if (!isNaN(bytes)) nextParams.set('maxSize', String(bytes))
     }
 
