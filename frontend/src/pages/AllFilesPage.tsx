@@ -866,17 +866,17 @@ export function AllFilesPage() {
       <FileDetailsDrawer open={detailOpen} file={activeFile} onClose={() => setDetailOpen(false)} />
 
       <DummyModal open={uploadOpen} title={t('areaMenu.upload')} description={t('files.uploadDesc')} onClose={() => setUploadOpen(false)}>
-        <form onSubmit={uploadFile} className="grid gap-4">
+        <form onSubmit={uploadFile} className="grid grid-cols-1 gap-4">
            <label onDragEnter={handleUploadDrag} onDragOver={handleUploadDrag} onDragLeave={handleUploadDrag} onDrop={handleUploadDrag} className={isUploadDragging ? 'grid cursor-pointer gap-3 rounded-2xl border-2 border-dashed border-blue-500 bg-blue-50 p-4 text-center transition sm:p-6' : 'grid cursor-pointer gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-4 text-center transition hover:border-blue-300 hover:bg-blue-50/50 sm:p-6'}>
             <Upload className={isUploadDragging ? 'mx-auto h-8 w-8 text-blue-600' : 'mx-auto h-8 w-8 text-slate-500'} />
             <span className="text-sm font-extrabold text-slate-950">{t('files.dropHere')}</span>
             <span className="text-xs text-slate-500">{t('files.uploadHint')}</span>
-            <Input type="file" className="sr-only" multiple onChange={(event) => selectUploadFiles(event.target.files)} required={selectedFiles.length === 0} />
+            <Input type="file" className="sr-only h-px w-px" multiple onChange={(event) => selectUploadFiles(event.target.files)} required={selectedFiles.length === 0} />
           </label>
           <label className="grid gap-2 text-sm font-semibold">
             {t('files.targetAccount')}
             <select
-              className="h-11 rounded-xl border border-slate-200 px-3 text-sm bg-white"
+              className="h-11 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-sm bg-white"
               value={selectedTargetAccountId}
               onChange={(event) => setSelectedTargetAccountId(event.target.value)}
             >
@@ -888,7 +888,7 @@ export function AllFilesPage() {
               ))}
             </select>
           </label>
-          {activeFolder ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{t('files.uploadingTo')} <b>{activeFolder.name}</b></p> : <label className="grid gap-2 text-sm font-semibold">{t('details.folder')}<select className="h-11 rounded-xl border border-slate-200 px-3 text-sm bg-white" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">{t('details.noFolder')}</option>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
+          {activeFolder ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{t('files.uploadingTo')} <b>{activeFolder.name}</b></p> : <label className="grid gap-2 text-sm font-semibold">{t('details.folder')}<select className="h-11 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-sm bg-white" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">{t('details.noFolder')}</option>{allFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
           {selectedFiles.length > 0 ? <div className="grid max-h-56 gap-2 overflow-y-auto rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><div className="flex items-center justify-between gap-3"><span className="font-bold text-slate-950">{t('files.selected', { count: selectedFiles.length })}</span><span className="shrink-0">{formatBytes(selectedFiles.reduce((total, file) => total + file.size, 0))}</span></div>{selectedFiles.map((file, index) => <div key={`${file.name}-${file.size}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><span className="min-w-0 flex-1 truncate" title={file.name}>{file.name}</span><span className="shrink-0 text-xs text-slate-500">{formatBytes(file.size)}</span><button type="button" className="shrink-0 text-slate-500 hover:text-red-600" onClick={() => removeUploadFile(index)} aria-label={t('files.removeFile', { name: file.name })}><X className="h-4 w-4" /></button></div>)}</div> : null}
           <div className="grid gap-3 sm:flex sm:justify-end"><Button type="button" variant="outline" onClick={() => setUploadOpen(false)}>{t('common.cancel')}</Button><Button disabled={loading || selectedFiles.length === 0}>{loading ? t('files.uploading') : selectedFiles.length > 1 ? t('files.uploadN', { count: selectedFiles.length }) : t('files.upload')}</Button></div>
         </form>
