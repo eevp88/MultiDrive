@@ -1,22 +1,39 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
 import { API_URL, apiFetch } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import { useI18n } from '@/i18n/I18nProvider'
 
-export type UploadProgressStatus = 'uploading' | 'done' | 'error' | 'partial'
-export type UploadProgressFile = { name: string; size: number; percent: number; status: UploadProgressStatus }
+export type UploadProgressStatus = 'queued' | 'uploading' | 'done' | 'error' | 'partial' | 'cancelled'
+export type UploadProgressFile = { id: string; name: string; size: number; percent: number; status: UploadProgressStatus }
 export type UploadProgressState = { open: boolean; fileName: string; percent: number; status: UploadProgressStatus; files: UploadProgressFile[] }
 
-type ResumableSession = { sessionId: string; file: File; folderId?: string | null; targetAccountId?: string | null }
+type UploadItem = { id: string; file: File; folderId: string | null; targetAccountId?: string | null; sessionId?: string }
 
 type UploadContextType = {
   uploadProgress: UploadProgressState
   setUploadProgress: React.Dispatch<React.SetStateAction<UploadProgressState>>
   uploadFiles: (files: File[], folderId: string | null, targetAccountId?: string | null) => Promise<void>
-  retryFailedUpload: (fileName: string) => Promise<void>
+  retryFailedUpload: (id: string) => Promise<void>
+  cancelUpload: (id?: string) => void
 }
 
 const UploadContext = createContext<UploadContextType | undefined>(undefined)
+
+const CHUNK_SIZE = 5 * 1024 * 1024 // 5MB chunks (must be multiple of 256KB for Google Drive)
+let nextUploadId = 0
+
+function isAbort(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
+// The panel header: done only when every file finished, otherwise what went wrong.
+function overallStatus(files: UploadProgressFile[]): UploadProgressStatus {
+  if (files.some((file) => file.status === 'queued' || file.status === 'uploading')) return 'uploading'
+  if (files.every((file) => file.status === 'done')) return 'done'
+  if (files.every((file) => file.status === 'cancelled')) return 'cancelled'
+  if (files.every((file) => file.status === 'error')) return 'error'
+  return 'partial'
+}
 
 export function UploadProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
@@ -27,23 +44,30 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     status: 'uploading',
     files: []
   })
-  const [resumableSessions, setResumableSessions] = useState<Record<string, ResumableSession>>({})
+  // Everything the upload loop needs lives in refs so a long upload never reads an outdated copy of the state.
+  const queueRef = useRef<UploadItem[]>([])
+  const runningRef = useRef(false)
+  const itemsRef = useRef(new Map<string, UploadItem>())
+  const controllersRef = useRef(new Map<string, AbortController>())
 
-  async function uploadSingleFileResumable(file: File, folderId: string | null, onProgress: (percent: number) => void, sessionIdToRetry?: string, targetAccountId?: string | null) {
-    const CHUNK_SIZE = 5 * 1024 * 1024 // 5MB chunks (must be multiple of 256KB for Google Drive)
-    let sessionId = sessionIdToRetry || ''
+  function updateFile(id: string, patch: Partial<UploadProgressFile>) {
+    setUploadProgress((current) => {
+      const files = current.files.map((file) => (file.id === id ? { ...file, ...patch } : file))
+      const percent = files.length === 0 ? 0 : Math.round(files.reduce((sum, file) => sum + file.percent, 0) / files.length)
+      return { ...current, files, percent, status: overallStatus(files) }
+    })
+  }
+
+  async function uploadSingleFileResumable(item: UploadItem, signal: AbortSignal) {
+    const { file, folderId, targetAccountId } = item
+    let sessionId = item.sessionId || ''
     let startOffset = 0
-
-    // Pre-save session parameters so that retry is functional even if the init API call fails
-    setResumableSessions(prev => ({
-      ...prev,
-      [file.name]: { sessionId, file, folderId, targetAccountId }
-    }))
 
     // 1. Initialize or get status
     if (!sessionId) {
       const initData = await apiFetch<{ sessionId: string; provider: string }>('/uploads/resumable/init', {
         method: 'POST',
+        signal,
         body: JSON.stringify({
           fileName: file.name,
           mimeType: file.type || 'application/octet-stream',
@@ -53,18 +77,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         })
       })
       sessionId = initData.sessionId
-      // Update session with the active sessionId
-      setResumableSessions(prev => ({
-        ...prev,
-        [file.name]: { sessionId, file, folderId, targetAccountId }
-      }))
+      // Kept so a failed upload can be resumed from where it stopped.
+      itemsRef.current.set(item.id, { ...item, sessionId })
     } else {
-      const statusData = await apiFetch<{ status: string; offset: string }>(`/uploads/resumable/status/${sessionId}`)
+      const statusData = await apiFetch<{ status: string; offset: string }>(`/uploads/resumable/status/${sessionId}`, { signal })
       startOffset = Number(statusData.offset)
-      if (statusData.status === 'completed') {
-        onProgress(100)
-        return
-      }
+      if (statusData.status === 'completed') return
     }
 
     // 2. Upload chunk by chunk
@@ -75,6 +93,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       // We use raw fetch with authorization header for binary stream upload
       const response = await fetch(`${API_URL}/uploads/resumable/chunk/${sessionId}`, {
         method: 'PUT',
+        signal,
         headers: {
           'Authorization': `Bearer ${getAccessToken()}`,
           'Content-Range': `bytes ${startOffset}-${endOffset - 1}/${file.size}`,
@@ -88,117 +107,94 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       }
 
       const resData = await response.json() as { status: string; offset?: string }
-      if (resData.status === 'completed') {
-        onProgress(100)
-        break
-      }
+      if (resData.status === 'completed') return
 
       startOffset = Number(resData.offset)
-      const percent = Math.min(99, Math.round((startOffset / file.size) * 100))
-      onProgress(percent)
+      updateFile(item.id, { percent: Math.min(99, Math.round((startOffset / file.size) * 100)), status: 'uploading' })
+    }
+
+    // Every byte was sent but the server never said it finished: do not show it as done.
+    throw new Error('Upload did not complete')
+  }
+
+  async function processQueue() {
+    runningRef.current = true
+    try {
+      for (let item = queueRef.current.shift(); item; item = queueRef.current.shift()) {
+        const controller = new AbortController()
+        controllersRef.current.set(item.id, controller)
+        updateFile(item.id, { status: 'uploading' })
+        try {
+          await uploadSingleFileResumable(item, controller.signal)
+          updateFile(item.id, { percent: 100, status: 'done' })
+        } catch (err) {
+          if (isAbort(err)) {
+            updateFile(item.id, { status: 'cancelled' })
+          } else {
+            console.error('File upload failed:', item.file.name, err)
+            updateFile(item.id, { status: 'error' })
+          }
+        } finally {
+          controllersRef.current.delete(item.id)
+        }
+      }
+    } finally {
+      runningRef.current = false
+      // Dispatch global events so active pages reload their data
+      window.dispatchEvent(new Event('multidrive:storage-changed'))
+      window.dispatchEvent(new Event('multidrive:upload-completed'))
     }
   }
 
   async function uploadFiles(filesToUpload: File[], targetFolderId: string | null, targetAccountId?: string | null) {
     if (filesToUpload.length === 0) return
 
-    // Setup initial status
-    setUploadProgress({
-      open: true,
-      fileName: filesToUpload.length === 1 ? filesToUpload[0].name : t('upload.filesCount', { count: filesToUpload.length }),
-      percent: 0,
-      status: 'uploading',
-      files: filesToUpload.map(f => ({ name: f.name, size: f.size, percent: 0, status: 'uploading' }))
+    const items: UploadItem[] = filesToUpload.map((file) => ({ id: `upload-${++nextUploadId}`, file, folderId: targetFolderId, targetAccountId }))
+    items.forEach((item) => itemsRef.current.set(item.id, item))
+    const rows: UploadProgressFile[] = items.map((item) => ({ id: item.id, name: item.file.name, size: item.file.size, percent: 0, status: 'queued' }))
+    const alreadyRunning = runningRef.current
+
+    // A second batch joins the one in progress; otherwise the panel starts over.
+    setUploadProgress((current) => {
+      const files = alreadyRunning ? [...current.files, ...rows] : rows
+      return {
+        open: true,
+        fileName: files.length === 1 ? files[0].name : t('upload.filesCount', { count: files.length }),
+        percent: alreadyRunning ? current.percent : 0,
+        status: 'uploading',
+        files
+      }
     })
 
-    // Upload files sequentially
-    for (let i = 0; i < filesToUpload.length; i++) {
-      const file = filesToUpload[i]
-      try {
-        await uploadSingleFileResumable(file, targetFolderId, (filePercent) => {
-          setUploadProgress((current) => {
-            const nextFiles = [...current.files]
-            if (nextFiles[i]) {
-              nextFiles[i] = { ...nextFiles[i], percent: filePercent, status: filePercent >= 100 ? 'done' : 'uploading' }
-            }
-            const overallPercent = Math.round(nextFiles.reduce((sum, f) => sum + f.percent, 0) / nextFiles.length)
-            return {
-              ...current,
-              percent: overallPercent,
-              files: nextFiles
-            }
-          })
-        }, undefined, targetAccountId)
-      } catch (err) {
-        console.error('File upload failed:', file.name, err)
-        setUploadProgress((current) => {
-          const nextFiles = [...current.files]
-          if (nextFiles[i]) {
-            nextFiles[i] = { ...nextFiles[i], status: 'error' }
-          }
-          return {
-            ...current,
-            status: 'partial',
-            files: nextFiles
-          }
-        })
-      }
-    }
-
-    // Dispatch global events so active pages reload their data
-    window.dispatchEvent(new Event('multidrive:storage-changed'))
-    window.dispatchEvent(new Event('multidrive:upload-completed'))
+    queueRef.current.push(...items)
+    if (!alreadyRunning) await processQueue()
   }
 
-  async function retryFailedUpload(fileName: string) {
-    const session = resumableSessions[fileName]
-    if (!session) return
+  async function retryFailedUpload(id: string) {
+    const item = itemsRef.current.get(id)
+    if (!item) return
+    updateFile(id, { percent: 0, status: 'queued' })
+    setUploadProgress((current) => ({ ...current, open: true }))
+    queueRef.current.push(item)
+    if (!runningRef.current) await processQueue()
+  }
 
-    setUploadProgress((current) => {
-      const nextFiles = current.files.map(f => f.name === fileName ? { ...f, status: 'uploading' as const } : f)
-      return {
-        ...current,
-        status: 'uploading',
-        files: nextFiles
-      }
-    })
-
-    try {
-      const fileIndex = uploadProgress.files.findIndex(f => f.name === fileName)
-      await uploadSingleFileResumable(session.file, session.folderId || null, (filePercent) => {
-        setUploadProgress((current) => {
-          const nextFiles = [...current.files]
-          if (nextFiles[fileIndex]) {
-            nextFiles[fileIndex] = { ...nextFiles[fileIndex], percent: filePercent, status: filePercent >= 100 ? 'done' : 'uploading' }
-          }
-          const overallPercent = Math.round(nextFiles.reduce((sum, f) => sum + f.percent, 0) / nextFiles.length)
-          const allDone = nextFiles.every(f => f.status === 'done')
-          return {
-            ...current,
-            percent: overallPercent,
-            status: allDone ? 'done' : 'uploading',
-            files: nextFiles
-          }
-        })
-      }, session.sessionId, session.targetAccountId)
-
-      window.dispatchEvent(new Event('multidrive:storage-changed'))
-      window.dispatchEvent(new Event('multidrive:upload-completed'))
-    } catch (err) {
-      console.error('Retry upload failed:', fileName, err)
-      setUploadProgress((current) => {
-        const nextFiles = current.files.map(f => f.name === fileName ? { ...f, status: 'error' as const } : f)
-        return {
-          ...current,
-          status: 'partial',
-          files: nextFiles
-        }
-      })
+  // Without an id, stops everything that has not finished. Files already uploaded stay uploaded.
+  function cancelUpload(id?: string) {
+    const ids = id ? [id] : [...queueRef.current.map((item) => item.id), ...controllersRef.current.keys()]
+    queueRef.current = queueRef.current.filter((item) => !ids.includes(item.id))
+    for (const target of ids) {
+      controllersRef.current.get(target)?.abort()
     }
+    // Files that were only waiting never reach the loop, so mark them here (the active one is marked when its request aborts).
+    setUploadProgress((current) => {
+      const files = current.files.map((file) => (ids.includes(file.id) && file.status === 'queued' ? { ...file, status: 'cancelled' as const } : file))
+      return { ...current, files, status: overallStatus(files) }
+    })
   }
 
   return (
-    <UploadContext.Provider value={{ uploadProgress, setUploadProgress, uploadFiles, retryFailedUpload }}>
+    <UploadContext.Provider value={{ uploadProgress, setUploadProgress, uploadFiles, retryFailedUpload, cancelUpload }}>
       {children}
     </UploadContext.Provider>
   )

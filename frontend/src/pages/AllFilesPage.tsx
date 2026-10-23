@@ -317,7 +317,6 @@ export function AllFilesPage() {
   async function uploadFile(event: FormEvent) {
     event.preventDefault()
     if (selectedFiles.length === 0) return
-    setLoading(true)
     setMessage('')
 
     const uploadingFiles = [...selectedFiles]
@@ -329,13 +328,8 @@ export function AllFilesPage() {
     setSelectedTargetAccountId('')
     setUploadOpen(false)
 
-    try {
-      await uploadFiles(uploadingFiles, targetFolderId, targetAccountId)
-    } catch (err) {
-      console.error('Upload initiation failed:', err)
-    } finally {
-      setLoading(false)
-    }
+    // The panel follows the transfer, so the page is not kept busy until it ends.
+    uploadFiles(uploadingFiles, targetFolderId, targetAccountId).catch((err) => console.error('Upload failed:', err))
   }
 
 
