@@ -322,7 +322,7 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
     }).parse(req.body)
 
     const sizeBytes = BigInt(body.sizeBytes)
-    if (sizeBytes <= 0n) return res.status(400).json({ code: 'UPLOAD_SIZE_REQUIRED', message: 'Valid sizeBytes required.' })
+    if (sizeBytes < 0n) return res.status(400).json({ code: 'UPLOAD_SIZE_REQUIRED', message: 'Valid sizeBytes required.' })
     if (sizeBytes > BigInt(env.MAX_UPLOAD_BYTES)) return res.status(400).json({ code: 'UPLOAD_TOO_LARGE', message: 'File exceeds max upload size.' })
 
     const folderId = body.folderId || null
@@ -336,6 +336,8 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
 
     const account = await selectAccount(req.user!.id, sizeBytes, undefined, targetAccountId)
     if (!account) return res.status(400).json({ code: 'NO_ACCOUNT_WITH_ENOUGH_SPACE', message: 'No connected storage account has enough space.' })
+    // Only Google Drive can create an empty file here; the other providers still need a session with a size.
+    if (sizeBytes === 0n && account.provider !== 'google_drive') return res.status(400).json({ code: 'UPLOAD_SIZE_REQUIRED', message: 'Valid sizeBytes required.' })
 
     if (account.provider === 'onedrive') {
       const accessToken = await getMicrosoftAccessToken(account)
@@ -369,6 +371,23 @@ uploadRouter.post('/resumable/init', requireAuth, async (req: AuthRequest, res, 
       if (folderRecord?.providerFolderId) {
         targetParentId = folderRecord.providerFolderId
       }
+    }
+
+    if (sizeBytes === 0n) {
+      // An empty file has no content to stream and Drive does not open a resumable session for it, so it is created directly.
+      const drive = google.drive({ version: 'v3', auth })
+      // The mime type becomes the type of the file here, so a Google-native one (a folder, a Doc...) is never accepted from the client.
+      const mimeType = body.mimeType.startsWith('application/vnd.google-apps.') ? 'application/octet-stream' : body.mimeType
+      const created = await drive.files.create({ requestBody: { name: body.fileName, mimeType, parents: [targetParentId] }, fields: 'id,name,mimeType' })
+      if (!created.data.id) throw new HttpError(502, 'GOOGLE_API_ERROR', 'Google Drive did not create the file.')
+      const file = await prisma.file.create({
+        data: { userId: req.user!.id, connectedAccountId: account.id, folderId, provider: 'google_drive', providerFileId: created.data.id, name: created.data.name || body.fileName, mimeType: created.data.mimeType || mimeType, sizeBytes: 0n }
+      })
+      const session = await prisma.uploadSession.create({
+        data: { userId: req.user!.id, targetConnectedAccountId: account.id, folderId, fileName: body.fileName, mimeType, sizeBytes, status: 'completed', completedAt: new Date() }
+      })
+      await createAuditLog(req.user!.id, 'UPLOAD_FILE', 'file', file.id, { name: file.name, size: '0' })
+      return res.status(201).json({ sessionId: session.id, provider: 'google_drive', offset: 0, completed: true, file: { ...file, sizeBytes: '0' } })
     }
 
     // Initiate Google Drive Resumable Session
