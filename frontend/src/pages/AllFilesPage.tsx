@@ -220,10 +220,13 @@ export function AllFilesPage() {
     }
   }
 
+  // The advanced filters live in the URL; the list must reload when only one of them changes.
+  const filterKey = ['kind', 'accountId', 'minSize', 'maxSize', 'startDate', 'endDate'].map((key) => searchParams.get(key) ?? '').join('|')
+
   useEffect(() => {
     loadAll().catch((error) => setMessage(translateError(error, 'files.failedLoad')))
     setSelectedFileIds(new Set())
-  }, [activeFolderId, searchQuery, language])
+  }, [activeFolderId, searchQuery, filterKey, language])
 
   useEffect(() => {
     async function loadConnectedAccounts() {
@@ -742,13 +745,20 @@ export function AllFilesPage() {
     setPreviewOpen(false)
   }
 
+  // The listener is registered once, so it reads the latest loadAll through a ref (the folder, search and filters of the moment).
+  const loadAllRef = useRef(loadAll)
+  loadAllRef.current = loadAll
+
   useEffect(() => {
     function handleUploadCompleted() {
-      loadAll().catch(() => undefined)
+      loadAllRef.current().catch(() => undefined)
     }
     window.addEventListener('multidrive:upload-completed', handleUploadCompleted)
     return () => window.removeEventListener('multidrive:upload-completed', handleUploadCompleted)
-  }, [activeFolderId])
+  }, [])
+
+  // The header buttons belong to this page: without this they stay on screen, doing nothing, after navigating elsewhere.
+  useEffect(() => () => setHeaderActions(null), [])
 
   // The header buttons are only rebuilt when the dependencies below change, so they must not call a stale copy of the sync
   // (it would reload the folder the page was opened in instead of the current one).
