@@ -261,6 +261,8 @@ export const es: Messages = {
   'files.folderReadyMove': 'Carpeta "{name}" lista para mover. Abre la carpeta de destino y presiona Ctrl+V.',
   'files.folderMoved': 'Carpeta "{name}" movida.',
   'files.downloadFailed': 'Falló la descarga',
+  'files.failedDelete': 'No se pudieron eliminar los elementos',
+  'files.zipLimit': 'Un ZIP puede tener como máximo {max} archivos. Selecciona menos archivos.',
   'files.zipFailed': 'No se pudo descargar el archivo ZIP',
   'files.folderColor': 'Color de la carpeta',
   'files.folderIcon': 'Icono de la carpeta',

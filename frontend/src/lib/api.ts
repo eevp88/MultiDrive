@@ -1,4 +1,5 @@
 import { clearAuthSession, getAccessToken, getRefreshToken, setAccessToken } from '@/lib/auth'
+import { fileNameFromContentDisposition } from '@/lib/download'
 
 const isProd = import.meta.env.PROD
 const rawApiUrl = import.meta.env.VITE_API_URL
@@ -51,6 +52,27 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   }
 
   return response.json() as Promise<T>
+}
+
+// Same auth handling as apiFetch (token refresh on 401, ApiError on failure) for responses that are files, not JSON.
+export async function apiFetchBlob(path: string, options: ApiOptions = {}): Promise<{ blob: Blob; fileName: string | null }> {
+  const headers = new Headers(options.headers)
+  const token = getAccessToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers })
+  if (response.status === 401 && options.retry !== false && await refreshAccessToken()) {
+    return apiFetchBlob(path, { ...options, retry: false })
+  }
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }))
+    if (response.status === 401) clearAuthSession()
+    throw new ApiError(error.message ?? 'Request failed', error.code)
+  }
+
+  return { blob: await response.blob(), fileName: fileNameFromContentDisposition(response.headers.get('Content-Disposition')) }
 }
 
 export function formatBytes(input: string | number | bigint | null | undefined) {
