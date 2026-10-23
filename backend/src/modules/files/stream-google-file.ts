@@ -47,8 +47,14 @@ export async function streamGoogleFile(file: FileWithAccount, range: string | un
   })
 
   if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText)
-    return res.status(response.status).json({ code: 'GOOGLE_FILE_STREAM_FAILED', message: message || response.statusText })
+    // Google's body stays in the server log. Its 401 must not reach the client as a 401: the app takes any 401 for its own
+    // expired session and would sign the user out.
+    const body = await response.text().catch(() => '')
+    console.error('Google file stream failed:', response.status, body.slice(0, 300))
+    if (response.status === 401) return res.status(409).json({ code: 'ACCOUNT_RECONNECT_REQUIRED', message: 'This Google account needs to be reconnected.' })
+    if (response.status === 404) return res.status(404).json({ code: 'GOOGLE_FILE_NOT_FOUND', message: 'The file no longer exists in Google Drive.' })
+    if (response.status === 416) return res.status(416).json({ code: 'GOOGLE_FILE_STREAM_FAILED', message: 'Google Drive could not stream that range.' })
+    return res.status(502).json({ code: 'GOOGLE_FILE_STREAM_FAILED', message: 'Google Drive could not stream this file.' })
   }
 
   res.status(response.status)

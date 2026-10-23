@@ -607,7 +607,11 @@ uploadRouter.put('/resumable/chunk/:id', requireAuth, async (req: AuthRequest, r
       data: { status: 'failed', errorMessage: errorMsg }
     })
 
-    return res.status(putRes.status).json({ code: 'UPLOAD_FAILED', message: errorMsg })
+    // Google's body stays in the log (and in the session row). Its status is not passed on: a 401 would sign the user out.
+    logUpload('google chunk failed', { status: putRes.status, body: errorMsg.slice(0, 300) })
+    if (putRes.status === 401) return res.status(409).json({ code: 'ACCOUNT_RECONNECT_REQUIRED', message: 'This Google account needs to be reconnected.' })
+    if (putRes.status === 404 || putRes.status === 410) return res.status(410).json({ code: 'UPLOAD_SESSION_EXPIRED', message: 'The upload session expired. Start the upload again.' })
+    return res.status(502).json({ code: 'UPLOAD_FAILED', message: 'Google Drive rejected the upload.' })
   } catch (error) {
     return next(error)
   }
