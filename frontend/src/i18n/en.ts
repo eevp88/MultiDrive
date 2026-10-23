@@ -259,6 +259,8 @@ export const en = {
   'files.folderReadyMove': 'Folder "{name}" ready to move. Open target folder and press Ctrl+V.',
   'files.folderMoved': 'Folder "{name}" moved.',
   'files.downloadFailed': 'Download failed',
+  'files.failedDelete': 'Failed to delete items',
+  'files.zipLimit': 'A ZIP can have at most {max} files. Select fewer files.',
   'files.zipFailed': 'Failed to download ZIP file',
   'files.folderColor': 'Folder Color',
   'files.folderIcon': 'Folder Icon',

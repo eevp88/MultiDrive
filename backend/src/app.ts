@@ -29,7 +29,8 @@ app.use((_req, res, next) => {
   next()
 })
 
-app.use(cors({ origin: env.FRONTEND_URL }))
+// The frontend reads the file name the server chose for a download from this header.
+app.use(cors({ origin: env.FRONTEND_URL, exposedHeaders: ['Content-Disposition'] }))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))

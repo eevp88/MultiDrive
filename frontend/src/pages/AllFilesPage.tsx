@@ -14,10 +14,10 @@ import type { FolderSizeScale } from '@/components/drive/FolderGrid'
 import { defaultFolderColor, defaultFolderIconUrl, folderColorOptions, folderIconOptions, iconUrlWithColor, normalizeFolderColor } from '@/components/drive/FolderVisual'
 import { PageHeader } from '@/components/drive/PageHeader'
 import { Input } from '@/components/ui/input'
-import { API_URL, apiFetch, formatBytes, formatDate } from '@/lib/api'
+import { API_URL, apiFetch, apiFetchBlob, formatBytes, formatDate } from '@/lib/api'
 import { providerName } from '@/lib/providers'
 import { useI18n } from '@/i18n/I18nProvider'
-import { getAccessToken } from '@/lib/auth'
+import { saveBlob } from '@/lib/download'
 import { createPlyr, ensurePlyr } from '@/lib/plyr'
 import { getPreviewKind, officeViewerUrl } from '@/lib/preview'
 import type { FileItem, FolderItem } from '@/data/drive-data'
@@ -42,6 +42,15 @@ const fileViewStorageKey = 'multidrive:all-files-view-mode'
 function getStoredFileViewMode(): FileViewMode {
   const stored = localStorage.getItem(fileViewStorageKey)
   return stored === 'grid' || stored === 'list' ? stored : 'list'
+}
+
+// The batch endpoints (move, delete, ZIP) accept at most 100 ids per request.
+const maxBatchSize = 100
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size))
+  return chunks
 }
 
 function mimeToKind(mimeType: string): FileItem['kind'] {
@@ -245,6 +254,7 @@ export function AllFilesPage() {
 
     function onOpenMoveShortcut(e: Event) {
       const file = (e as CustomEvent).detail as FileItem
+      selectContextFile(file)
       setActiveFile(file)
       setSelectedFolderId(file.folderId || '')
       setMoveOpen(true)
@@ -256,7 +266,7 @@ export function AllFilesPage() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('multidrive:open-move-modal', onOpenMoveShortcut)
     }
-  }, [activeFolderForMenu, cutFolder, activeFolderId])
+  }, [activeFolderForMenu, cutFolder, activeFolderId, selectedFileIds])
 
   useEffect(() => {
     if (!previewOpen || !activeFile?.mimeType?.startsWith('video/') || !previewVideoRef.current) return undefined
@@ -374,9 +384,17 @@ export function AllFilesPage() {
 
 
 
+  // Like Google Drive: a menu opened on a file outside the selection acts on that file only; inside it, on the whole selection.
+  function selectContextFile(file: FileItem) {
+    if (!file.id || selectedFileIds.has(file.id)) return
+    setSelectedFileIds(new Set([file.id]))
+    setSelectedFolderIds(new Set())
+  }
+
   function openContext(event: MouseEvent<HTMLElement>, file: FileItem) {
     event.preventDefault()
     event.stopPropagation()
+    selectContextFile(file)
     setActiveFile(file)
     setContextMenu({ x: event.clientX, y: event.clientY, file })
   }
@@ -499,44 +517,33 @@ export function AllFilesPage() {
 
   async function downloadFile() {
     if (!activeFile?.id) return
-    const response = await fetch(`${API_URL}/files/${activeFile.id}/download`, { headers: { Authorization: `Bearer ${getAccessToken()}` } })
-    if (!response.ok) throw new Error(t('files.downloadFailed'))
-    const blob = await response.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = activeFile.name
-    link.click()
-    URL.revokeObjectURL(url)
+    const file = activeFile
     setContextMenu({ x: 0, y: 0, file: null })
+    setMessage('')
+    try {
+      const { blob, fileName } = await apiFetchBlob(`/files/${file.id}/download`)
+      saveBlob(blob, fileName ?? file.name)
+    } catch (error) {
+      setMessage(translateError(error, 'files.downloadFailed'))
+    }
   }
 
   async function downloadBatchAsZip() {
     const selectedIds = [...selectedFileIds]
     if (selectedIds.length === 0) return
+    if (selectedIds.length > maxBatchSize) {
+      setMessage(t('files.zipLimit', { max: maxBatchSize }))
+      return
+    }
     setLoading(true)
     setMessage('')
     try {
-      const response = await fetch(`${API_URL}/files/batch-download`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAccessToken()}`
-        },
-        body: JSON.stringify({ fileIds: selectedIds })
-      })
-      if (!response.ok) throw new Error(t('files.zipFailed'))
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = 'multidrive-download.zip'
-      link.click()
-      URL.revokeObjectURL(url)
+      const { blob, fileName } = await apiFetchBlob('/files/batch-download', { method: 'POST', body: JSON.stringify({ fileIds: selectedIds }) })
+      saveBlob(blob, fileName ?? 'multidrive-download.zip')
       clearSelection()
       setMessage(t('files.batchDone'))
     } catch (error) {
-      setMessage(translateError(error, 'files.batchFailed'))
+      setMessage(translateError(error, 'files.zipFailed'))
     } finally {
       setLoading(false)
     }
@@ -570,35 +577,43 @@ export function AllFilesPage() {
     event.preventDefault()
     const selectedIds = [...selectedFileIds]
     const folderIds = topLevelSelectedFolderIds()
+    if (selectedIds.length === 0 && folderIds.length === 0 && !activeFile?.id) return
     let failed = 0
-    if (selectedIds.length > 0 || folderIds.length > 0) {
-      if (selectedIds.length > 0) await apiFetch('/files/batch', { method: 'PATCH', body: JSON.stringify({ fileIds: selectedIds, folderId: selectedFolderId || null }) })
-      const results = await Promise.allSettled(folderIds.map((id) => apiFetch(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ parentId: selectedFolderId || null }) })))
-      failed = results.filter((result) => result.status === 'rejected').length
-    } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'PATCH', body: JSON.stringify({ folderId: selectedFolderId || null }) })
-    else return
+    try {
+      if (selectedIds.length > 0 || folderIds.length > 0) {
+        for (const ids of chunk(selectedIds, maxBatchSize)) await apiFetch('/files/batch', { method: 'PATCH', body: JSON.stringify({ fileIds: ids, folderId: selectedFolderId || null }) })
+        const results = await Promise.allSettled(folderIds.map((id) => apiFetch(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ parentId: selectedFolderId || null }) })))
+        failed = results.filter((result) => result.status === 'rejected').length
+      } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'PATCH', body: JSON.stringify({ folderId: selectedFolderId || null }) })
+      setMessage(failed > 0 ? t('files.batchActionFailed') : '')
+    } catch (error) {
+      setMessage(translateError(error, 'files.failedMove'))
+    }
     setMoveOpen(false)
     setSelectedFolderId('')
     clearSelection()
-    setMessage(failed > 0 ? t('files.batchActionFailed') : '')
-    await Promise.all([loadFiles(), loadFolders()])
+    await Promise.all([loadFiles(), loadFolders()]).catch(() => undefined)
   }
 
   async function deleteFile() {
     const selectedIds = [...selectedFileIds]
     const folderIds = topLevelSelectedFolderIds()
+    if (selectedIds.length === 0 && folderIds.length === 0 && !activeFile?.id) return
     let failed = 0
-    if (selectedIds.length > 0 || folderIds.length > 0) {
-      if (selectedIds.length > 0) await apiFetch('/files/batch', { method: 'DELETE', body: JSON.stringify({ fileIds: selectedIds }) })
-      for (const id of folderIds) {
-        try { await apiFetch(`/folders/${id}`, { method: 'DELETE' }) } catch { failed += 1 }
-      }
-    } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'DELETE' })
-    else return
+    try {
+      if (selectedIds.length > 0 || folderIds.length > 0) {
+        for (const ids of chunk(selectedIds, maxBatchSize)) await apiFetch('/files/batch', { method: 'DELETE', body: JSON.stringify({ fileIds: ids }) })
+        for (const id of folderIds) {
+          try { await apiFetch(`/folders/${id}`, { method: 'DELETE' }) } catch { failed += 1 }
+        }
+      } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'DELETE' })
+      setMessage(failed > 0 ? t('files.batchActionFailed') : '')
+    } catch (error) {
+      setMessage(translateError(error, 'files.failedDelete'))
+    }
     setDeleteOpen(false)
     clearSelection()
-    setMessage(failed > 0 ? t('files.batchActionFailed') : '')
-    await Promise.all([loadFiles(), loadFolders()])
+    await Promise.all([loadFiles(), loadFolders()]).catch(() => undefined)
     window.dispatchEvent(new Event('multidrive:storage-changed'))
   }
 

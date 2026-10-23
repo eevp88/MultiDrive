@@ -419,12 +419,30 @@ fileRouter.post('/batch-download', async (req: AuthRequest, res, next) => {
     res.setHeader('Content-Disposition', 'attachment; filename="multidrive-download.zip"')
 
     const archive = new ZipArchive({ zlib: { level: 9 } })
-    archive.on('error', (err: any) => {
-      throw err
+    let archiveFailed = false
+    // Never throw here: this runs outside the route's try/catch, so a throw would be an uncaught exception that stops the process.
+    const failArchive = (error: unknown) => {
+      if (archiveFailed) return
+      archiveFailed = true
+      console.error('Batch download archive failed:', describeError(error))
+      archive.unpipe(res)
+      archive.abort()
+      if (!res.headersSent) {
+        res.removeHeader('Content-Disposition')
+        res.status(500).json({ code: 'BATCH_DOWNLOAD_FAILED', message: 'The ZIP download could not be created.' })
+      } else {
+        // Destroying the response makes the client see a failed download instead of a truncated ZIP.
+        res.destroy()
+      }
+    }
+    archive.on('error', failArchive)
+    res.on('close', () => {
+      if (!res.writableFinished) archive.abort()
     })
     archive.pipe(res)
 
     for (const file of files) {
+      if (archiveFailed) break
       try {
         let stream: Readable
         let fileName = file.name
@@ -451,6 +469,8 @@ fileRouter.post('/batch-download', async (req: AuthRequest, res, next) => {
           if (!response.ok || !response.body) continue
           stream = Readable.fromWeb(response.body as any)
         }
+        // Archiver listens to a source only when it reaches it in its queue, so an earlier source error would be uncaught.
+        stream.on('error', failArchive)
         archive.append(stream, { name: fileName })
       } catch (err) {
         console.error(`Failed to add file ${file.name} to zip:`, err)
@@ -459,6 +479,8 @@ fileRouter.post('/batch-download', async (req: AuthRequest, res, next) => {
 
     await archive.finalize()
   } catch (error) {
+    // The archive error handler already answered or destroyed the response.
+    if (res.headersSent || res.destroyed) return
     return next(error)
   }
 })
