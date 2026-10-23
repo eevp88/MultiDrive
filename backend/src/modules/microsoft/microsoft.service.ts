@@ -155,6 +155,8 @@ export async function syncMicrosoftAppFolderFiles(accountId: string, userId: str
   let updated = 0
   let deleted = 0
 
+  // The sync never changes status or deletedAt of a file it already knows: a file the user trashed in the app is still in
+  // OneDrive and must stay in the trash until it is restored there.
   for (const item of items) {
     const mimeType = item.file?.mimeType ?? 'application/octet-stream'
     const sizeBytes = BigInt(item.size ?? 0)
@@ -165,9 +167,9 @@ export async function syncMicrosoftAppFolderFiles(accountId: string, userId: str
       created += 1
       continue
     }
-    const changed = existing.name !== item.name || existing.mimeType !== mimeType || existing.sizeBytes !== sizeBytes || existing.status !== 'active' || existing.deletedAt !== null || (existing.takenAt?.getTime() ?? null) !== (takenAt?.getTime() ?? null)
+    const changed = existing.name !== item.name || existing.mimeType !== mimeType || existing.sizeBytes !== sizeBytes || (existing.takenAt?.getTime() ?? null) !== (takenAt?.getTime() ?? null)
     if (changed) {
-      await prisma.file.update({ where: { id: existing.id }, data: { name: item.name, mimeType, sizeBytes, takenAt, status: 'active', deletedAt: null } })
+      await prisma.file.update({ where: { id: existing.id }, data: { name: item.name, mimeType, sizeBytes, takenAt } })
       updated += 1
     }
   }

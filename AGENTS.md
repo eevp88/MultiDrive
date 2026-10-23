@@ -220,6 +220,8 @@ Folders:
 Files:
 - `GET /files`
 - `GET /files?folderId=<id>`
+- `PATCH /files/:id` and `PATCH /files/batch` with `folderId`: a Google Drive file is moved in Drive too (the sync reads its folder from there), and only into a folder mirrored in its own account, otherwise 400 `FOLDER_NOT_ON_ACCOUNT`. The batch answers `{ moved, failed[] }` (400 when nothing could be moved). OneDrive and S3 files keep their folders in the database.
+- `DELETE /folders/:id` deletes the folder and its files from the provider. Files really gone are removed from MySQL; files that could not be deleted go to the trash (`status: deleted`). `DELETE /files/batch/permanent` treats a file that is already gone from its provider as deleted.
 - `GET /files?rootOnly=1`: only the files that are not inside a folder (what All Files shows at the root when nothing is searched or filtered).
 - `GET /files?q=<search>`
 - `GET /files/shared-links`
@@ -255,7 +257,7 @@ Uploads:
 - Backend selects a connected Drive account with enough available quota and streams each file directly to Google Drive.
 - Google Drive uploads are placed under the root Drive folder named `MultiDrive`; folders created in the app are mirrored in Drive, and Drive subfolders are imported by the sync.
 - OneDrive accounts take part in the same routing. Files up to 4 MiB use a simple upload; larger ones use a Graph upload session with 10 MiB chunks. Both `POST /uploads` and the resumable endpoints (`/uploads/resumable/init`, `/status/:id`, `/chunk/:id`, which the web UI uses) support OneDrive. A same-name upload is renamed by OneDrive instead of replacing the file. Files live in the OneDrive folder `MultiDrive`; virtual folders stay database-only.
-- `POST /files/sync-google` treats Google Drive folder `MultiDrive` as source of truth for physical files and folders: it walks the whole subfolder tree, creates or updates the matching `folders` rows (name and parent, restoring a soft-deleted one that exists again), soft-deletes mirrored folders that no longer exist in Drive (folders without `providerFolderId` are left alone), creates missing MySQL file rows, updates changed metadata, and marks missing Drive files as deleted. It also syncs OneDrive accounts (same rules, folder `MultiDrive`).
+- `POST /files/sync-google` treats Google Drive folder `MultiDrive` as source of truth for physical files and folders: it walks the whole subfolder tree, creates or updates the matching `folders` rows (name and parent, restoring a soft-deleted one that exists again), soft-deletes mirrored folders that no longer exist in Drive (folders without `providerFolderId` are left alone), creates missing MySQL file rows, updates changed metadata (including the folder a file sits in), and marks missing Drive files as deleted. It never changes `status` or `deletedAt` of a file it already knows, so a file trashed in the app stays in the trash until it is restored there (same for OneDrive). It also syncs OneDrive accounts (same rules, folder `MultiDrive`).
 
 ## Docker
 

@@ -91,18 +91,26 @@ export function TrashPage() {
     setLoading(true)
     setMessage('')
     try {
-      await apiFetch('/files/batch/permanent', {
+      const result = await apiFetch<{ deleted: number; failed: { fileId: string }[] }>('/files/batch/permanent', {
         method: 'DELETE',
         body: JSON.stringify({ fileIds: ids })
       })
-      setFiles((prev) => prev.filter((f) => !ids.includes(f.id)))
+      // The backend answers 200 even when only some files could be deleted: keep the ones that failed in the list.
+      const failedIds = new Set(result.failed.map((item) => item.fileId))
+      const removedIds = ids.filter((id) => !failedIds.has(id))
+      setFiles((prev) => prev.filter((f) => !removedIds.includes(f.id)))
       setSelectedIds((prev) => {
         const next = new Set(prev)
-        ids.forEach((id) => next.delete(id))
+        removedIds.forEach((id) => next.delete(id))
         return next
       })
-      setMessage(t('trash.deleted', { count: ids.length }))
-      setMessageType('success')
+      if (failedIds.size > 0) {
+        setMessage(t('trash.deletedPartial', { count: result.deleted, failed: failedIds.size }))
+        setMessageType('error')
+      } else {
+        setMessage(t('trash.deleted', { count: result.deleted }))
+        setMessageType('success')
+      }
       window.dispatchEvent(new Event('multidrive:storage-changed'))
     } catch (error) {
       setMessage(translateError(error, 'trash.deleteFailed'))
