@@ -205,12 +205,12 @@ export function AllFilesPage() {
     setLoading(true)
     setMessage('')
     try {
-      await apiFetch('/files/batch', {
+      const result = await apiFetch<{ moved: number; failed?: unknown[] }>('/files/batch', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileIds, folderId: targetFolderId })
       })
-      setMessage(t('files.movedItems', { count: fileIds.length }))
+      setMessage(result.failed && result.failed.length > 0 ? t('files.batchActionFailed') : t('files.movedItems', { count: result.moved }))
       loadAll().catch(() => undefined)
       setSelectedFileIds(new Set())
     } catch (error) {
@@ -579,13 +579,17 @@ export function AllFilesPage() {
     const folderIds = topLevelSelectedFolderIds()
     if (selectedIds.length === 0 && folderIds.length === 0 && !activeFile?.id) return
     let failed = 0
+    let failedFiles = 0
     try {
       if (selectedIds.length > 0 || folderIds.length > 0) {
-        for (const ids of chunk(selectedIds, maxBatchSize)) await apiFetch('/files/batch', { method: 'PATCH', body: JSON.stringify({ fileIds: ids, folderId: selectedFolderId || null }) })
+        for (const ids of chunk(selectedIds, maxBatchSize)) {
+          const result = await apiFetch<{ failed?: unknown[] }>('/files/batch', { method: 'PATCH', body: JSON.stringify({ fileIds: ids, folderId: selectedFolderId || null }) })
+          failedFiles += result.failed?.length ?? 0
+        }
         const results = await Promise.allSettled(folderIds.map((id) => apiFetch(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ parentId: selectedFolderId || null }) })))
         failed = results.filter((result) => result.status === 'rejected').length
       } else if (activeFile?.id) await apiFetch(`/files/${activeFile.id}`, { method: 'PATCH', body: JSON.stringify({ folderId: selectedFolderId || null }) })
-      setMessage(failed > 0 ? t('files.batchActionFailed') : '')
+      setMessage(failed + failedFiles > 0 ? t('files.batchActionFailed') : '')
     } catch (error) {
       setMessage(translateError(error, 'files.failedMove'))
     }
@@ -711,9 +715,15 @@ export function AllFilesPage() {
 
   async function deleteFolder() {
     if (!activeFolderForMenu?.id) return
-    await apiFetch(`/folders/${activeFolderForMenu.id}`, { method: 'DELETE' })
+    try {
+      await apiFetch(`/folders/${activeFolderForMenu.id}`, { method: 'DELETE' })
+      setMessage('')
+    } catch (error) {
+      setMessage(translateError(error, 'files.failedDelete'))
+    }
     setFolderDeleteOpen(false)
-    await loadFolders()
+    await Promise.all([loadFiles(), loadFolders()]).catch(() => undefined)
+    window.dispatchEvent(new Event('multidrive:storage-changed'))
   }
 
   function cutSelectedFolder(folder: FolderItem | null) {

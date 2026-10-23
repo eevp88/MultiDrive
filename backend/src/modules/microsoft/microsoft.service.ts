@@ -155,6 +155,8 @@ export async function syncMicrosoftAppFolderFiles(accountId: string, userId: str
   let updated = 0
   let deleted = 0
 
+  // A file the user trashed in the app is still in OneDrive and stays in the trash until it is restored there. Only a file this
+  // sync itself marked as deleted (deletedBySync) because it had disappeared comes back when it reappears.
   for (const item of items) {
     const mimeType = item.file?.mimeType ?? 'application/octet-stream'
     const sizeBytes = BigInt(item.size ?? 0)
@@ -165,16 +167,17 @@ export async function syncMicrosoftAppFolderFiles(accountId: string, userId: str
       created += 1
       continue
     }
-    const changed = existing.name !== item.name || existing.mimeType !== mimeType || existing.sizeBytes !== sizeBytes || existing.status !== 'active' || existing.deletedAt !== null || (existing.takenAt?.getTime() ?? null) !== (takenAt?.getTime() ?? null)
+    const reappeared = existing.status !== 'active' && existing.deletedBySync
+    const changed = reappeared || existing.name !== item.name || existing.mimeType !== mimeType || existing.sizeBytes !== sizeBytes || (existing.takenAt?.getTime() ?? null) !== (takenAt?.getTime() ?? null)
     if (changed) {
-      await prisma.file.update({ where: { id: existing.id }, data: { name: item.name, mimeType, sizeBytes, takenAt, status: 'active', deletedAt: null } })
+      await prisma.file.update({ where: { id: existing.id }, data: { name: item.name, mimeType, sizeBytes, takenAt, ...(reappeared ? { status: 'active', deletedAt: null, deletedBySync: false } : {}) } })
       updated += 1
     }
   }
 
   const missing = existingFiles.filter((file) => file.status === 'active' && !remoteIds.has(file.providerFileId)).map((file) => file.id)
   if (missing.length > 0) {
-    deleted = (await prisma.file.updateMany({ where: { id: { in: missing }, userId }, data: { status: 'deleted', deletedAt: new Date() } })).count
+    deleted = (await prisma.file.updateMany({ where: { id: { in: missing }, userId }, data: { status: 'deleted', deletedAt: new Date(), deletedBySync: true } })).count
   }
 
   await syncMicrosoftQuota(account.id).catch(() => undefined)

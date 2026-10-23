@@ -1,3 +1,4 @@
+import type { ConnectedAccount, File, Folder } from '@prisma/client'
 import { Router } from 'express'
 import { google } from 'googleapis'
 import { z } from 'zod'
@@ -8,10 +9,11 @@ import { hashToken, randomToken } from '../../utils/crypto.js'
 import { openShareToken, sealShareToken } from '../../utils/share-token.js'
 import { HttpError, clientMessage, describeError } from '../../utils/http-error.js'
 import { thumbnailHandler } from '../photos/thumbnail.js'
-import { getAuthedGoogleClient, syncGoogleAppFolderFiles } from '../google/google.service.js'
-import { deleteMicrosoftItem, fetchMicrosoftFileContent, renameMicrosoftItem, syncMicrosoftAppFolderFiles } from '../microsoft/microsoft.service.js'
+import { ensureGoogleAppFolder, getAuthedGoogleClient, moveGoogleFile, syncGoogleAppFolderFiles } from '../google/google.service.js'
+import { fetchMicrosoftFileContent, renameMicrosoftItem, syncMicrosoftAppFolderFiles } from '../microsoft/microsoft.service.js'
 import { syncQuotaForAccount } from '../storage/sync-quota.js'
-import { deleteS3Object, syncS3Quota, createS3Client, getS3ConfigForAccount } from '../s3/s3.service.js'
+import { syncS3Quota, createS3Client, getS3ConfigForAccount } from '../s3/s3.service.js'
+import { deleteProviderFile } from './provider-delete.js'
 import { streamProviderFile } from './stream-file.js'
 import { googleDownloadExportMimeTypes, normalizeHeaders, withExtension } from './stream-google-file.js'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
@@ -96,15 +98,42 @@ fileRouter.get('/', async (req: AuthRequest, res, next) => {
   }
 })
 
+// Google Drive decides where a file sits (the sync reads it back), so a move has to happen there too or the next sync undoes it.
+// A Google file can only go to a folder that is mirrored in its own account. Other providers keep their folders in the database.
+async function placeFileInFolder(file: File & { connectedAccount: ConnectedAccount }, folder: Folder | null) {
+  if (file.provider !== 'google_drive') return
+  if (folder && (folder.connectedAccountId !== file.connectedAccountId || !folder.providerFolderId)) {
+    throw new HttpError(400, 'FOLDER_NOT_ON_ACCOUNT', 'That folder belongs to another account, so the file cannot be moved there.')
+  }
+  const parentId = folder?.providerFolderId ?? await ensureGoogleAppFolder(file.connectedAccount)
+  await moveGoogleFile(file.connectedAccount, file.providerFileId, parentId)
+}
+
 const batchFileSchema = z.object({ fileIds: z.array(z.string().min(1)).min(1).max(100) })
 
 fileRouter.patch('/batch', async (req: AuthRequest, res, next) => {
   try {
     const body = batchFileSchema.extend({ folderId: z.string().nullable().optional() }).parse(req.body)
-    if (body.folderId) await prisma.folder.findFirstOrThrow({ where: { id: body.folderId, userId: req.user!.id, deletedAt: null } })
-    const result = await prisma.file.updateMany({ where: { id: { in: body.fileIds }, userId: req.user!.id, status: 'active' }, data: { folderId: body.folderId ?? null } })
-    await createAuditLog(req.user!.id, 'MOVE_FILES', 'file', undefined, { count: result.count, folderId: body.folderId })
-    return res.json({ status: 'ok', moved: result.count })
+    const folder = body.folderId ? await prisma.folder.findFirstOrThrow({ where: { id: body.folderId, userId: req.user!.id, deletedAt: null } }) : null
+    const files = await prisma.file.findMany({ where: { id: { in: body.fileIds }, userId: req.user!.id, status: 'active' }, include: { connectedAccount: true } })
+    const movedIds: string[] = []
+    const failed: Array<{ fileId: string; code?: string; message: string }> = []
+    for (const file of files) {
+      try {
+        await placeFileInFolder(file, folder)
+        movedIds.push(file.id)
+      } catch (error) {
+        console.error('Failed to move file', file.id, describeError(error))
+        failed.push({ fileId: file.id, code: error instanceof HttpError ? error.code : undefined, message: clientMessage(error, 'Move failed.') })
+      }
+    }
+    if (movedIds.length > 0) await prisma.file.updateMany({ where: { id: { in: movedIds }, userId: req.user!.id }, data: { folderId: body.folderId ?? null } })
+    await createAuditLog(req.user!.id, 'MOVE_FILES', 'file', undefined, { count: movedIds.length, folderId: body.folderId })
+    if (movedIds.length === 0 && failed.length > 0) {
+      const codes = new Set(failed.map((item) => item.code))
+      return res.status(400).json({ code: codes.size === 1 && failed[0].code ? failed[0].code : 'FILES_MOVE_FAILED', message: failed[0].message, moved: 0, failed })
+    }
+    return res.json({ status: 'ok', moved: movedIds.length, failed })
   } catch (error) {
     return next(error)
   }
@@ -154,8 +183,15 @@ fileRouter.post('/batch/restore', async (req: AuthRequest, res, next) => {
     const files = await prisma.file.findMany({ where: { id: { in: body.fileIds }, userId: req.user!.id, status: 'deleted' } })
     const result = await prisma.file.updateMany({
       where: { id: { in: body.fileIds }, userId: req.user!.id, status: 'deleted' },
-      data: { status: 'active', deletedAt: null }
+      data: { status: 'active', deletedAt: null, deletedBySync: false }
     })
+    // A file whose folder was deleted meanwhile would come back invisible: put it at the root instead.
+    const folderIds = [...new Set(files.map((file) => file.folderId).filter((id): id is string => Boolean(id)))]
+    if (folderIds.length > 0) {
+      const liveFolders = new Set((await prisma.folder.findMany({ where: { id: { in: folderIds }, deletedAt: null }, select: { id: true } })).map((folder) => folder.id))
+      const detachIds = files.filter((file) => file.folderId && !liveFolders.has(file.folderId)).map((file) => file.id)
+      if (detachIds.length > 0) await prisma.file.updateMany({ where: { id: { in: detachIds }, userId: req.user!.id }, data: { folderId: null } })
+    }
     for (const f of files) {
       await createAuditLog(req.user!.id, 'RESTORE_FILE', 'file', f.id, { name: f.name })
     }
@@ -178,15 +214,7 @@ fileRouter.delete('/batch/permanent', async (req: AuthRequest, res, next) => {
 
     for (const file of files) {
       try {
-        if (file.provider === 's3') {
-          await deleteS3Object(file)
-        } else if (file.provider === 'onedrive') {
-          await deleteMicrosoftItem(file.connectedAccount, file.providerFileId)
-        } else {
-          const auth = await getAuthedGoogleClient(file.connectedAccount)
-          const drive = google.drive({ version: 'v3', auth })
-          await drive.files.delete({ fileId: file.providerFileId })
-        }
+        await deleteProviderFile(file)
         deletedIds.push(file.id)
         syncedAccountIds.add(file.connectedAccountId)
         await createAuditLog(req.user!.id, 'PERMANENT_DELETE_FILE', 'file', file.id, { name: file.name })
@@ -278,8 +306,9 @@ fileRouter.patch('/:id', async (req: AuthRequest, res, next) => {
     const body = z.object({ name: z.string().min(1).max(255).optional(), folderId: z.string().nullable().optional() }).parse(req.body)
     const fileId = String(req.params.id)
     const file = await prisma.file.findFirstOrThrow({ where: { id: fileId, userId: req.user!.id }, include: { connectedAccount: true } })
-    const drive = file.provider === 'google_drive' ? google.drive({ version: 'v3', auth: await getAuthedGoogleClient(file.connectedAccount) }) : null
-    if (body.folderId) await prisma.folder.findFirstOrThrow({ where: { id: body.folderId, userId: req.user!.id, deletedAt: null } })
+    const drive = body.name && file.provider === 'google_drive' ? google.drive({ version: 'v3', auth: await getAuthedGoogleClient(file.connectedAccount) }) : null
+    const folder = body.folderId ? await prisma.folder.findFirstOrThrow({ where: { id: body.folderId, userId: req.user!.id, deletedAt: null } }) : null
+    if (body.folderId !== undefined) await placeFileInFolder(file, folder)
     if (body.name && drive) await drive.files.update({ fileId: file.providerFileId, requestBody: { name: body.name } })
     // OneDrive may adjust the name (invalid characters), so the stored name is the one it reports back.
     const newName = body.name && file.provider === 'onedrive' ? await renameMicrosoftItem(file.connectedAccount, file.providerFileId, body.name) : body.name

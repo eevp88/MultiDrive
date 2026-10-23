@@ -103,6 +103,16 @@ export async function ensureGoogleAppFolder(account: ConnectedAccount) {
   return folderId
 }
 
+// Moves a Drive file under another parent (the root `MultiDrive` folder or one of its subfolders).
+export async function moveGoogleFile(account: ConnectedAccount, providerFileId: string, parentId: string) {
+  const drive = google.drive({ version: 'v3', auth: await getAuthedGoogleClient(account) })
+  const current = await drive.files.get({ fileId: providerFileId, fields: 'parents' })
+  const previous = current.data.parents ?? []
+  const toRemove = previous.filter((id) => id !== parentId)
+  if (previous.includes(parentId) && toRemove.length === 0) return
+  await drive.files.update({ fileId: providerFileId, addParents: parentId, ...(toRemove.length > 0 ? { removeParents: toRemove.join(',') } : {}), fields: 'id' })
+}
+
 export type GoogleAppFolderSyncResult = {
   accountId: string
   created: number
@@ -221,6 +231,8 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
   let updated = 0
   let deleted = 0
 
+  // A file the user trashed in the app is still in Drive and stays in the trash until it is restored there. Only a file this
+  // sync itself marked as deleted (deletedBySync) because it had disappeared comes back when it reappears.
   for (const driveFile of driveFiles) {
     const dbFolderId = driveFile.parentId === appFolderId ? null : (folderIdMap.get(driveFile.parentId) ?? null)
     const existing = existingByProviderId.get(driveFile.id)
@@ -232,11 +244,12 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
       continue
     }
 
-    const needsUpdate = existing.name !== driveFile.name || existing.mimeType !== driveFile.mimeType || existing.sizeBytes !== driveFile.sizeBytes || existing.status !== 'active' || existing.deletedAt !== null || existing.folderId !== dbFolderId || (existing.takenAt?.getTime() ?? null) !== (driveFile.takenAt?.getTime() ?? null)
+    const reappeared = existing.status !== 'active' && existing.deletedBySync
+    const needsUpdate = reappeared || existing.name !== driveFile.name || existing.mimeType !== driveFile.mimeType || existing.sizeBytes !== driveFile.sizeBytes || existing.folderId !== dbFolderId || (existing.takenAt?.getTime() ?? null) !== (driveFile.takenAt?.getTime() ?? null)
     if (needsUpdate) {
       await prisma.file.update({
         where: { id: existing.id },
-        data: { name: driveFile.name, mimeType: driveFile.mimeType, sizeBytes: driveFile.sizeBytes, takenAt: driveFile.takenAt, status: 'active', deletedAt: null, folderId: dbFolderId },
+        data: { name: driveFile.name, mimeType: driveFile.mimeType, sizeBytes: driveFile.sizeBytes, takenAt: driveFile.takenAt, folderId: dbFolderId, ...(reappeared ? { status: 'active', deletedAt: null, deletedBySync: false } : {}) },
       })
       updated += 1
     }
@@ -244,7 +257,7 @@ export async function syncGoogleAppFolderFiles(accountId: string, userId: string
 
   const missingActiveIds = existingFiles.filter((file) => file.status === 'active' && !driveFileIds.has(file.providerFileId)).map((file) => file.id)
   if (missingActiveIds.length > 0) {
-    const result = await prisma.file.updateMany({ where: { id: { in: missingActiveIds }, userId }, data: { status: 'deleted', deletedAt: new Date() } })
+    const result = await prisma.file.updateMany({ where: { id: { in: missingActiveIds }, userId }, data: { status: 'deleted', deletedAt: new Date(), deletedBySync: true } })
     deleted = result.count
   }
 

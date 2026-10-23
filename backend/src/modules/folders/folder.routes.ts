@@ -4,9 +4,10 @@ import { z } from 'zod'
 import { prisma } from '../../config/prisma.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
 import { getAuthedGoogleClient, syncGoogleQuota, ensureGoogleAppFolder } from '../google/google.service.js'
-import { deleteMicrosoftItem } from '../microsoft/microsoft.service.js'
+import { deleteProviderFile } from '../files/provider-delete.js'
 import { syncQuotaForAccount } from '../storage/sync-quota.js'
 import { createAuditLog } from '../../utils/audit.js'
+import { HttpError, describeError, isProviderNotFound } from '../../utils/http-error.js'
 
 export const folderRouter = Router()
 folderRouter.use(requireAuth)
@@ -276,22 +277,22 @@ folderRouter.delete('/:id', async (req: AuthRequest, res, next) => {
 
     const files = await prisma.file.findMany({ where: { userId: req.user!.id, status: 'active', folderId: { in: [...folderIds] } }, include: { connectedAccount: true } })
     const syncedAccountIds = new Set<string>()
+    const removedFileIds: string[] = []
+    const survivingFiles: typeof files = []
     for (const file of files) {
       try {
-        if (file.provider === 'onedrive') {
-          await deleteMicrosoftItem(file.connectedAccount, file.providerFileId)
-        } else {
-          const auth = await getAuthedGoogleClient(file.connectedAccount)
-          const drive = google.drive({ version: 'v3', auth })
-          await drive.files.delete({ fileId: file.providerFileId })
-        }
+        await deleteProviderFile(file)
+        removedFileIds.push(file.id)
         syncedAccountIds.add(file.connectedAccountId)
-      } catch {
+      } catch (error) {
         // Keep going so one failure does not block the whole deletion
+        console.error('Failed to delete file', file.id, describeError(error))
+        survivingFiles.push(file)
       }
     }
 
-    // Delete folders on Google Drive
+    // Delete folders on Google Drive (this also removes whatever is still inside them there)
+    const removedFolderIds = new Set<string>()
     const foldersToDelete = await prisma.folder.findMany({ where: { id: { in: [...folderIds] }, userId: req.user!.id }, include: { connectedAccount: true } })
     for (const f of foldersToDelete) {
       if (f.providerFolderId && f.connectedAccount) {
@@ -299,20 +300,52 @@ folderRouter.delete('/:id', async (req: AuthRequest, res, next) => {
           const auth = await getAuthedGoogleClient(f.connectedAccount)
           const drive = google.drive({ version: 'v3', auth })
           await drive.files.delete({ fileId: f.providerFolderId })
+          removedFolderIds.add(f.id)
           if (f.connectedAccountId) syncedAccountIds.add(f.connectedAccountId)
-        } catch {
-          // ignore
+        } catch (error) {
+          if (isProviderNotFound(error)) removedFolderIds.add(f.id)
+          else console.error('Failed to delete folder', f.id, describeError(error))
         }
       }
     }
 
-    await prisma.file.updateMany({ where: { id: { in: files.map((file) => file.id) } }, data: { status: 'deleted', deletedAt: new Date() } })
-    await prisma.folder.updateMany({ where: { id: { in: [...folderIds] }, userId: req.user!.id }, data: { deletedAt: new Date() } })
+    // A folder is gone when it lives only in the database or Drive removed it (itself or through an ancestor, which takes
+    // everything inside with it). One that Drive could not remove must not be marked deleted: the next sync would bring it back.
+    const parentById = new Map(folders.map((folder) => [folder.id, folder.parentId]))
+    const driveRemovedFolderIds = new Set<string>()
+    const goneFolderIds = new Set<string>()
+    for (const f of foldersToDelete) {
+      if (!f.providerFolderId || !f.connectedAccount) {
+        goneFolderIds.add(f.id)
+        continue
+      }
+      const seen = new Set<string>()
+      for (let current: string | null | undefined = f.id; current && !seen.has(current); current = parentById.get(current)) {
+        if (removedFolderIds.has(current)) {
+          driveRemovedFolderIds.add(f.id)
+          goneFolderIds.add(f.id)
+          break
+        }
+        seen.add(current)
+      }
+    }
+
+    // A file that is really gone from its provider has nothing to restore, so it is not kept in the trash. One that could
+    // not be deleted (and is not inside a Drive folder that was removed) still exists there, so it goes to the trash.
+    // Google files that were already in the trash inside a removed Drive folder are gone too.
+    const goneWithFolder = survivingFiles.filter((file) => file.provider === 'google_drive' && file.folderId && driveRemovedFolderIds.has(file.folderId)).map((file) => file.id)
+    const trashedFileIds = survivingFiles.map((file) => file.id).filter((id) => !goneWithFolder.includes(id))
+    const trashedInRemovedFolders = (await prisma.file.findMany({ where: { userId: req.user!.id, status: 'deleted', provider: 'google_drive', folderId: { in: [...driveRemovedFolderIds] } }, select: { id: true } })).map((file) => file.id)
+    const goneFileIds = [...removedFileIds, ...goneWithFolder, ...trashedInRemovedFolders]
+    if (goneFileIds.length > 0) await prisma.file.deleteMany({ where: { id: { in: goneFileIds }, userId: req.user!.id } })
+    if (trashedFileIds.length > 0) await prisma.file.updateMany({ where: { id: { in: trashedFileIds }, userId: req.user!.id }, data: { status: 'deleted', deletedAt: new Date(), deletedBySync: false } })
+    await prisma.folder.updateMany({ where: { id: { in: [...goneFolderIds] }, userId: req.user!.id }, data: { deletedAt: new Date() } })
     for (const accountId of syncedAccountIds) {
       const provider = files.find((file) => file.connectedAccountId === accountId)?.provider ?? 'google_drive'
       await syncQuotaForAccount({ id: accountId, provider }).catch(() => undefined)
     }
 
+    if (!goneFolderIds.has(root.id)) throw new HttpError(502, 'FOLDER_DELETE_FAILED', 'The folder could not be deleted from Google Drive. Try again.')
     await createAuditLog(req.user!.id, 'DELETE_FOLDER', 'folder', root.id, { name: root.name })
     return res.json({ status: 'ok' })
   } catch (error) {
