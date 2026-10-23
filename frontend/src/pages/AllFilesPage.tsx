@@ -245,6 +245,7 @@ export function AllFilesPage() {
 
     function onOpenMoveShortcut(e: Event) {
       const file = (e as CustomEvent).detail as FileItem
+      selectContextFile(file)
       setActiveFile(file)
       setSelectedFolderId(file.folderId || '')
       setMoveOpen(true)
@@ -256,7 +257,7 @@ export function AllFilesPage() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('multidrive:open-move-modal', onOpenMoveShortcut)
     }
-  }, [activeFolderForMenu, cutFolder, activeFolderId])
+  }, [activeFolderForMenu, cutFolder, activeFolderId, selectedFileIds])
 
   useEffect(() => {
     if (!previewOpen || !activeFile?.mimeType?.startsWith('video/') || !previewVideoRef.current) return undefined
@@ -374,9 +375,17 @@ export function AllFilesPage() {
 
 
 
+  // Like Google Drive: a menu opened on a file outside the selection acts on that file only; inside it, on the whole selection.
+  function selectContextFile(file: FileItem) {
+    if (!file.id || selectedFileIds.has(file.id)) return
+    setSelectedFileIds(new Set([file.id]))
+    setSelectedFolderIds(new Set())
+  }
+
   function openContext(event: MouseEvent<HTMLElement>, file: FileItem) {
     event.preventDefault()
     event.stopPropagation()
+    selectContextFile(file)
     setActiveFile(file)
     setContextMenu({ x: event.clientX, y: event.clientY, file })
   }
