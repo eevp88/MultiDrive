@@ -21,7 +21,7 @@ export function FileDetailsDrawer({ open, file, onClose }: { open: boolean; file
   return (
     <>
       <button className={open ? 'fixed inset-0 z-40 bg-slate-950/30' : 'pointer-events-none fixed inset-0 z-40 bg-slate-950/0'} aria-label={t('details.close')} onClick={onClose} />
-      <aside className={open ? 'fixed right-0 top-0 z-50 h-full w-full max-w-md translate-x-0 border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300' : 'fixed right-0 top-0 z-50 h-full w-full max-w-md translate-x-full border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300'}>
+      <div role="dialog" aria-label={t('details.title')} className={open ? 'fixed right-0 top-0 z-50 h-full w-full max-w-md translate-x-0 border-l border-slate-200 bg-white/95 shadow-2xl backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/95 transition-transform duration-300' : 'fixed right-0 top-0 z-50 h-full w-full max-w-md translate-x-full border-l border-slate-200 bg-white/95 shadow-2xl backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/95 transition-transform duration-300'}>
         <div className="flex items-center justify-between border-b border-slate-200 p-5">
           <div>
             <h2 className="text-xl font-extrabold">{t('details.title')}</h2>
@@ -40,7 +40,7 @@ export function FileDetailsDrawer({ open, file, onClose }: { open: boolean; file
             <DetailRow icon={Tag} label={t('details.mime')} value={file.mimeType ?? t('details.unknown')} />
           </div>
         ) : null}
-      </aside>
+      </div>
     </>
   )
 }
