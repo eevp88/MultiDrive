@@ -232,6 +232,7 @@ export const en = {
   'files.gdriveDone': 'Google Drive public link generated and copied to clipboard!',
   'files.makingPublic': 'Making Public...',
   'files.makePublic': 'Make Public & Copy GDrive Link',
+  'files.makePublicConfirm': 'Make this file public in Google Drive? Anyone with the link will be able to view and download it, and MultiDrive cannot revoke it.',
   'files.makePublicFailed': 'Failed to update Google Drive permission: {error}',
   'files.renameFolderTitle': 'Rename Folder',
   'files.deleteFolderDesc': 'Delete folder {name}? The folder and all the files inside it, including the ones in the trash, are permanently deleted from the storage provider.',

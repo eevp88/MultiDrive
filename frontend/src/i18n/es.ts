@@ -233,6 +233,7 @@ export const es: Messages = {
   'files.gdriveDesc': 'Hace este archivo visible en Google Drive para cualquiera que tenga el enlace, para que herramientas externas puedan verlo o descargarlo. Es de solo lectura y MultiDrive no puede revocarlo: se quita desde las opciones de compartir de Drive.',
   'files.gdriveDone': '¡Enlace público de Google Drive generado y copiado al portapapeles!',
   'files.makingPublic': 'Haciendo público...',
+  'files.makePublicConfirm': '¿Hacer este archivo público en Google Drive? Cualquiera con el enlace podrá verlo y descargarlo, y MultiDrive no puede revocarlo.',
   'files.makePublic': 'Hacer público y copiar enlace de GDrive',
   'files.makePublicFailed': 'No se pudo actualizar el permiso de Google Drive: {error}',
   'files.renameFolderTitle': 'Renombrar carpeta',
