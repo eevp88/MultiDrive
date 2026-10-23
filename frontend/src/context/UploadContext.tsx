@@ -65,7 +65,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
     // 1. Initialize or get status
     if (!sessionId) {
-      const initData = await apiFetch<{ sessionId: string; provider: string }>('/uploads/resumable/init', {
+      const initData = await apiFetch<{ sessionId: string; provider: string; completed?: boolean }>('/uploads/resumable/init', {
         method: 'POST',
         signal,
         body: JSON.stringify({
@@ -76,6 +76,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           targetAccountId: targetAccountId || undefined
         })
       })
+      // An empty file is created by the init call itself, there is nothing to send.
+      if (initData.completed) return
       sessionId = initData.sessionId
       // Kept so a failed upload can be resumed from where it stopped.
       itemsRef.current.set(item.id, { ...item, sessionId })
