@@ -508,6 +508,7 @@ export const es: Messages = {
   'public.embed': 'Insertar',
 
   'upload.filesCount': '{count} archivos',
+  'upload.progressCount': '{done} de {total} archivos',
 
   'recent.title': 'Recientes',
   'recent.description': 'Últimos archivos abiertos y modificados.',

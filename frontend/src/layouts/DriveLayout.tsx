@@ -526,6 +526,7 @@ export function DriveLayout() {
             <div className="flex items-center gap-2 font-extrabold text-sm text-slate-950">
               {uploadProgress.status === 'done' ? <CheckCircle className="h-5 w-5 text-emerald-500" /> : uploadProgress.status === 'partial' || uploadProgress.status === 'error' ? <X className="h-5 w-5 text-red-500" /> : uploadProgress.status === 'cancelled' ? <X className="h-5 w-5 text-slate-400" /> : <Upload className="h-5 w-5 text-blue-600" />}
               {uploadProgress.status === 'done' ? t('upload.complete') : uploadProgress.status === 'partial' ? t('upload.completeWithErrors') : uploadProgress.status === 'error' ? t('upload.failed') : uploadProgress.status === 'cancelled' ? t('upload.cancelled') : uploadProgress.percent >= 99 ? t('upload.processingServer') : t('upload.uploadingFiles')}
+              {uploadProgress.files.length > 1 ? <span className="shrink-0 text-xs font-semibold text-slate-500">{t('upload.progressCount', { done: uploadProgress.files.filter((file) => file.status === 'done').length, total: uploadProgress.files.length })}</span> : null}
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setUploadProgressCollapsed(!uploadProgressCollapsed)}><ChevronDown className={cn("h-4 w-4 transition-transform", uploadProgressCollapsed && "rotate-180")} /></Button>
@@ -541,15 +542,8 @@ export function DriveLayout() {
           </div>
           {!uploadProgressCollapsed && (
             <div className="p-4">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <p className="truncate font-semibold">{uploadProgress.fileName}</p>
-                <span className="text-slate-500">{uploadProgress.percent}%</span>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-slate-100">
-                <div className={uploadProgress.status === 'error' || uploadProgress.status === 'partial' ? 'h-full rounded-full bg-red-500' : uploadProgress.status === 'done' ? 'h-full rounded-full bg-emerald-500' : uploadProgress.status === 'cancelled' ? 'h-full rounded-full bg-slate-400' : 'h-full rounded-full bg-blue-600'} style={{ width: `${uploadProgress.percent}%` }} />
-              </div>
               {uploadProgress.files.length > 0 ? (
-                <div className="mt-4 grid max-h-64 gap-3 overflow-y-auto pr-1 text-slate-950">
+                <div className="grid max-h-64 gap-3 overflow-y-auto pr-1 text-slate-950">
                   {uploadProgress.files.map((file) => (
                     <div key={file.id} className="grid gap-1 rounded-xl bg-slate-50 p-3">
                       <div className="flex min-w-0 items-center justify-between gap-3 text-sm">

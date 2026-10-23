@@ -506,6 +506,7 @@ export const en = {
   'public.embed': 'Embed',
 
   'upload.filesCount': '{count} files',
+  'upload.progressCount': '{done} of {total} files',
 
   'recent.title': 'Recent',
   'recent.description': 'Latest opened and modified files.',
