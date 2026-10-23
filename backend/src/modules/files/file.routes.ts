@@ -49,8 +49,9 @@ fileRouter.get('/', async (req: AuthRequest, res, next) => {
       q: z.string().trim().max(255).optional(),
       kind: z.enum(['image', 'video', 'pdf', 'doc', 'archive']).optional(),
       accountId: z.string().optional(),
-      minSize: z.coerce.number().optional(),
-      maxSize: z.coerce.number().optional(),
+      // Whole bytes only: BigInt() throws on a fraction (the UI sends megabytes times 1024 * 1024, so 0.3 MB is a fraction).
+      minSize: z.coerce.number().finite().min(0).transform(Math.floor).optional(),
+      maxSize: z.coerce.number().finite().min(0).transform(Math.floor).optional(),
       startDate: z.string().datetime().optional(),
       endDate: z.string().datetime().optional()
     }).parse(req.query)
