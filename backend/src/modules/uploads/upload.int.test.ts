@@ -3,13 +3,12 @@ import { prisma } from '../../config/prisma.js'
 import { api, createAccount, createFolder, createUser } from '../../test/helpers.js'
 import { fakeDrive } from '../../test/fakes.js'
 
-async function setup(options: { availableBytes?: bigint | null } = {}) {
+async function setup(options: { availableBytes?: bigint | null; seedPolicy?: boolean } = {}) {
   const owner = await createUser()
   const account = await createAccount(owner.user.id)
   // A fresh quota snapshot, so the route does not try to sync it from Google first.
-  // Created up front on purpose: `selectAccount` upserts this row, and two files of a user's first batch upload do it at the
-  // same time, so one of them fails with a unique violation (found by T2, recorded in odd/tasks/test-suite.md L4).
-  await prisma.uploadRoutingPolicy.create({ data: { userId: owner.user.id, mode: 'most_available', priorityAccountIds: [] } })
+  // Most tests start with a policy row; the first-upload race test passes `seedPolicy: false` (odd/tasks/test-suite.md L4).
+  if (options.seedPolicy !== false) await prisma.uploadRoutingPolicy.create({ data: { userId: owner.user.id, mode: 'most_available', priorityAccountIds: [] } })
   await prisma.storageAccount.create({ data: { connectedAccountId: account.id, usedBytes: 0n, totalBytes: 1_000_000n, availableBytes: options.availableBytes === undefined ? 1_000_000n : options.availableBytes, lastSyncedAt: new Date() } })
   return { owner, account }
 }
@@ -68,6 +67,26 @@ describe('POST /uploads', () => {
     expect(res.body.files).toHaveLength(2)
     expect(res.body.failed).toEqual([])
     expect(await prisma.file.count()).toBe(2)
+  })
+
+  it('uploads every file of a first batch when the user has no routing policy yet', async () => {
+    const { owner } = await setup({ seedPolicy: false })
+    fakeDrive.files.create.mockImplementation(async ({ requestBody }: { requestBody: { name: string } }) => ({ data: { id: `drive-${requestBody.name}`, name: requestBody.name, mimeType: 'text/plain' } }))
+
+    const res = await api().post('/uploads').set(owner.auth)
+      .field('filesMeta', meta([
+        { fieldName: 'file-0', fileName: 'a.txt', mimeType: 'text/plain', sizeBytes: '1' },
+        { fieldName: 'file-1', fileName: 'b.txt', mimeType: 'text/plain', sizeBytes: '1' },
+        { fieldName: 'file-2', fileName: 'c.txt', mimeType: 'text/plain', sizeBytes: '1' },
+      ]))
+      .attach('file-0', Buffer.from('a'), 'a.txt')
+      .attach('file-1', Buffer.from('b'), 'b.txt')
+      .attach('file-2', Buffer.from('c'), 'c.txt')
+
+    expect(res.status).toBe(201)
+    expect(res.body.failed).toEqual([])
+    expect(res.body.files).toHaveLength(3)
+    expect(await prisma.uploadRoutingPolicy.count()).toBe(1)
   })
 
   it('places the file under the folder\'s Drive id', async () => {

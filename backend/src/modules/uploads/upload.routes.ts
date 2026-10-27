@@ -4,6 +4,7 @@ import { Router } from 'express'
 import { Readable } from 'stream'
 import { z } from 'zod'
 import { google } from 'googleapis'
+import { Prisma } from '@prisma/client'
 import { env } from '../../config/env.js'
 import { prisma } from '../../config/prisma.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
@@ -43,6 +44,19 @@ function byPriority<T extends { account: { id: string; createdAt: Date } }>(item
     if (bOrder !== undefined) return 1
     return a.account.createdAt.getTime() - b.account.createdAt.getTime()
   })
+}
+
+// The files of a batch pick their account at the same time, so on a user's first upload two of them can both try to create
+// the policy row. The loser gets a unique violation (P2002); the row exists by then, so it reads it instead of failing.
+async function getRoutingPolicy(userId: string) {
+  try {
+    return await prisma.uploadRoutingPolicy.upsert({ where: { userId }, create: { userId, mode: 'most_available', priorityAccountIds: [] }, update: {} })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return prisma.uploadRoutingPolicy.findUniqueOrThrow({ where: { userId } })
+    }
+    throw error
+  }
 }
 
 async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByAccount = new Map<string, bigint>(), targetAccountId?: string | null) {
@@ -86,7 +100,7 @@ async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByA
     return target?.account ?? null
   }
 
-  const policy = await prisma.uploadRoutingPolicy.upsert({ where: { userId }, create: { userId, mode: 'most_available', priorityAccountIds: [] }, update: {} })
+  const policy = await getRoutingPolicy(userId)
   const mode = (['most_available', 'round_robin', 'priority'].includes(policy.mode) ? policy.mode : 'most_available') as RoutingMode
   const priorityAccountIds = normalizePriorityAccountIds(policy.priorityAccountIds)
 
