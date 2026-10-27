@@ -149,6 +149,7 @@ Important files:
 Commands:
 - `cd frontend && npm run dev`: start Vite dev server.
 - `cd frontend && npm run build`: typecheck/build frontend.
+- `cd frontend && npm test`: run the Vitest suite (`src/**/*.test.{ts,tsx}`, jsdom + Testing Library, needs Node 22+). Config in `frontend/vitest.config.mts`, shared setup in `src/test/`. Tests never reach the network: `fetch` is stubbed.
 - `cd frontend && npm run preview`: preview production build.
 
 Environment:
@@ -288,6 +289,7 @@ Before finishing backend changes:
 
 Before finishing frontend changes:
 - `cd frontend && npm run build`
+- `cd frontend && npm test`
 
 Before finishing schema changes:
 - `cd backend && npm run prisma:migrate`
