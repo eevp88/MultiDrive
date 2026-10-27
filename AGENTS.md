@@ -142,6 +142,8 @@ Important files:
 - `frontend/src/components/drive/**`: drive-specific UI components.
 - `frontend/src/components/ui/**`: reusable UI primitives.
 - `frontend/src/lib/api.ts`: API helper, token refresh retry, formatting utilities.
+- `frontend/src/lib/selection.ts`: pure multi-select rules (click, Ctrl/Cmd+click, Shift+click range, select all) used by `AllFilesPage.tsx`.
+- `frontend/src/components/drive/UploadPanel.tsx`: floating upload progress panel (retry, cancel, close), rendered by `DriveLayout.tsx`.
 - `frontend/src/lib/auth.ts`: local auth session storage.
 - `frontend/src/lib/plyr.ts`: video preview player loading.
 - `frontend/src/style.css`: Tailwind import and global styles.

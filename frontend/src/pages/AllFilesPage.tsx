@@ -20,6 +20,7 @@ import { useI18n } from '@/i18n/I18nProvider'
 import { saveBlob } from '@/lib/download'
 import { createPlyr, ensurePlyr } from '@/lib/plyr'
 import { getPreviewKind, officeViewerUrl } from '@/lib/preview'
+import { clickSelection, emptySelection, selectAll, toggleAll, toggleId, type Selection, type SelectionItem } from '@/lib/selection'
 import type { FileItem, FolderItem } from '@/data/drive-data'
 import { useUpload } from '@/context/UploadContext'
 import { useDriveLayoutActions } from '@/layouts/DriveLayout'
@@ -123,7 +124,7 @@ export function AllFilesPage() {
   const [activeFolderForMenu, setActiveFolderForMenu] = useState<FolderItem | null>(null)
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
-  const selectionAnchorRef = useRef<{ type: 'file' | 'folder'; id: string } | null>(null)
+  const selectionAnchorRef = useRef<SelectionItem | null>(null)
   const [cutFolder, setCutFolder] = useState<FolderItem | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileItem | null }>({ x: 0, y: 0, file: null })
   const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: FolderItem | null }>({ x: 0, y: 0, folder: null })
@@ -439,70 +440,48 @@ export function AllFilesPage() {
 
   function toggleFileSelection(file: FileItem) {
     if (!file.id) return
-    setSelectedFileIds((current) => {
-      const next = new Set(current)
-      if (next.has(file.id!)) next.delete(file.id!)
-      else next.add(file.id!)
-      return next
-    })
+    setSelectedFileIds((current) => toggleId(current, file.id!))
   }
 
   function toggleFolderSelection(folder: FolderItem) {
     if (!folder.id) return
-    setSelectedFolderIds((current) => {
-      const next = new Set(current)
-      if (next.has(folder.id!)) next.delete(folder.id!)
-      else next.add(folder.id!)
-      return next
-    })
+    setSelectedFolderIds((current) => toggleId(current, folder.id!))
+  }
+
+  const visibleFileIdList = () => files.map((file) => file.id).filter(Boolean) as string[]
+  const visibleFolderIdList = () => visibleFolderRows.map((folder) => folder.id).filter(Boolean) as string[]
+
+  function applySelection(selection: Selection) {
+    setSelectedFileIds(selection.fileIds)
+    setSelectedFolderIds(selection.folderIds)
   }
 
   function toggleAllVisibleFiles() {
-    const visibleFileIds = files.map((file) => file.id).filter(Boolean) as string[]
-    const visibleFolderIds = visibleFolderRows.map((folder) => folder.id).filter(Boolean) as string[]
-    const allSelected = (visibleFileIds.length > 0 || visibleFolderIds.length > 0) && visibleFileIds.every((id) => selectedFileIds.has(id)) && visibleFolderIds.every((id) => selectedFolderIds.has(id))
-    setSelectedFileIds(allSelected ? new Set() : new Set(visibleFileIds))
-    setSelectedFolderIds(allSelected ? new Set() : new Set(visibleFolderIds))
+    applySelection(toggleAll(visibleFileIdList(), visibleFolderIdList(), { fileIds: selectedFileIds, folderIds: selectedFolderIds }))
   }
 
   function clearSelection() {
-    setSelectedFileIds(new Set())
-    setSelectedFolderIds(new Set())
+    applySelection(emptySelection())
   }
 
   function selectAllVisible() {
-    setSelectedFileIds(new Set(files.map((file) => file.id).filter(Boolean) as string[]))
-    setSelectedFolderIds(new Set(visibleFolderRows.map((folder) => folder.id).filter(Boolean) as string[]))
+    applySelection(selectAll(visibleFileIdList(), visibleFolderIdList()))
   }
 
   // File-manager selection on desktop: click selects one row, Ctrl/Cmd+click toggles it, Shift+click selects a range.
   function handleRowClick(item: { type: 'file' | 'folder'; id?: string }, event: MouseEvent<HTMLElement>) {
     if (!item.id) return
-    const order = [...visibleFolderRows.map((folder) => ({ type: 'folder' as const, id: folder.id })), ...files.map((file) => ({ type: 'file' as const, id: file.id }))].filter((entry): entry is { type: 'file' | 'folder'; id: string } => Boolean(entry.id))
-    const anchor = selectionAnchorRef.current
-    if (event.shiftKey && anchor) {
-      const from = order.findIndex((entry) => entry.type === anchor.type && entry.id === anchor.id)
-      const to = order.findIndex((entry) => entry.type === item.type && entry.id === item.id)
-      if (from >= 0 && to >= 0) {
-        const range = order.slice(Math.min(from, to), Math.max(from, to) + 1)
-        setSelectedFileIds(new Set(range.filter((entry) => entry.type === 'file').map((entry) => entry.id)))
-        setSelectedFolderIds(new Set(range.filter((entry) => entry.type === 'folder').map((entry) => entry.id)))
-        return
-      }
-    }
-    selectionAnchorRef.current = { type: item.type, id: item.id }
-    const setIds = item.type === 'file' ? setSelectedFileIds : setSelectedFolderIds
-    if (event.ctrlKey || event.metaKey) {
-      setIds((current) => {
-        const next = new Set(current)
-        if (next.has(item.id!)) next.delete(item.id!)
-        else next.add(item.id!)
-        return next
-      })
-      return
-    }
-    setSelectedFileIds(new Set(item.type === 'file' ? [item.id] : []))
-    setSelectedFolderIds(new Set(item.type === 'folder' ? [item.id] : []))
+    const order = [...visibleFolderRows.map((folder) => ({ type: 'folder' as const, id: folder.id })), ...files.map((file) => ({ type: 'file' as const, id: file.id }))].filter((entry): entry is SelectionItem => Boolean(entry.id))
+    const result = clickSelection({
+      order,
+      anchor: selectionAnchorRef.current,
+      item: { type: item.type, id: item.id },
+      shiftKey: event.shiftKey,
+      ctrlOrMeta: event.ctrlKey || event.metaKey,
+      current: { fileIds: selectedFileIds, folderIds: selectedFolderIds },
+    })
+    selectionAnchorRef.current = result.anchor
+    applySelection(result.selection)
   }
 
   function changeFileViewMode(mode: FileViewMode) {
