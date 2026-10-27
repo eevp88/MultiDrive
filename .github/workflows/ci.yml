@@ -48,3 +48,69 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+
+  backend-integration:
+    name: Backend (integration tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_DATABASE: multidrive_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pci-root-password"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # The suite refuses any database whose name does not end in _test.
+      TEST_DATABASE_URL: mysql://root:ci-root-password@127.0.0.1:3306/multidrive_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: mysql://root:ci-root-password@127.0.0.1:3306/multidrive_test
+      - run: npm run test:integration
+
+  e2e:
+    name: End to end (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Builds the backend and frontend images and starts the isolated stack from e2e/docker-compose.yml, then runs the tests.
+      - run: npm run e2e
+      - if: failure()
+        run: docker compose logs --no-color --tail 100
+      - if: always()
+        run: npm run stack:down
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7

@@ -601,6 +601,22 @@ npm run start:deploy
 
 `npm run db:migrate:deploy` uses Prisma production migrations and does not reset the database. If Prisma reports migration drift, stop the deploy and repair migration history first; do not run `prisma migrate reset` on production.
 
+## Automated Tests
+
+Tests need Node.js 22 or newer (Vitest 5). None of them touch a real Google Drive, OneDrive or S3 account, and none read a `.env` file.
+
+| Level | Command | What it needs |
+|---|---|---|
+| Backend unit | `cd backend && npm test` | nothing |
+| Backend integration (HTTP, Supertest) | `cd backend && TEST_DATABASE_URL=mysql://USER:PASSWORD@HOST:PORT/NAME_test npm run test:integration` | a throwaway MySQL with the migrations applied (`npx prisma migrate deploy` with `DATABASE_URL` pointing at it) |
+| Frontend unit and component | `cd frontend && npm test` | nothing |
+| End to end (Playwright) | `cd e2e && npm install && npx playwright install chromium && npm run e2e` | Docker |
+
+- The integration suite refuses to start when the database name does not end in `_test`, and it truncates every table before each test. Never point it at development data. Google is faked at the module boundary.
+- `npm run e2e` recreates an isolated stack (`e2e/docker-compose.yml`: its own project name, API on port 14000, web on 15173, MySQL in memory) and runs the browser tests against it. It does not touch the development stack. Registration is rate limited to 10 per hour per backend process and each run uses 3, so use `npm run e2e` instead of repeating `npm test` more than three times on the same stack.
+- Flows that need Drive (upload, download, sync) are covered by the integration tests with a fake Drive, not end to end.
+- GitHub Actions runs all four levels on every pull request (`.github/workflows/ci.yml`).
+
 ## 8. Manual Test Flow
 
 1. Open frontend:
