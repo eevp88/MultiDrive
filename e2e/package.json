@@ -1,0 +1,15 @@
+{
+  "name": "multidrive-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stack:up": "docker compose -f docker-compose.yml up -d --build --wait",
+    "stack:down": "docker compose -f docker-compose.yml down -v",
+    "test": "playwright test",
+    "e2e": "npm run stack:down && npm run stack:up && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^22.0.0"
+  }
+}

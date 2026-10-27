@@ -1,0 +1,59 @@
+# Throwaway stack for the Playwright suite: its own project name, ports and an in-memory database, so it never touches the
+# development stack or its data. The secrets below are fixed test values, not real ones. Google and OneDrive are not
+# configured, so the flows under test never reach a provider.
+name: multidrive-e2e
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: e2e-root-password
+      MYSQL_DATABASE: e2e
+      MYSQL_USER: e2e
+      MYSQL_PASSWORD: e2e-db-password
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      # Over TCP on purpose: the image's init-time server has networking off, so a socket ping would report healthy too early.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-pe2e-root-password"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build:
+      context: ../backend
+      args:
+        - HTTP_PROXY
+        - HTTPS_PROXY
+        - NO_PROXY
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://e2e:e2e-db-password@mysql:3306/e2e
+      APP_PORT: 4000
+      FRONTEND_URL: http://localhost:15173
+      JWT_ACCESS_SECRET: e2e-jwt-access-secret-0123456789abcdef0123456789
+      TOKEN_ENCRYPTION_KEY: e2e-token-encryption-key-0123456789abcdef012345
+      TRUST_PROXY: "0"
+    ports:
+      - "127.0.0.1:14000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        VITE_API_URL: http://localhost:14000
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:15173:80"
