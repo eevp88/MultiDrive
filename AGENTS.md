@@ -53,6 +53,7 @@ Commands:
 - `cd backend && npm run build`: typecheck/build backend.
 - `cd backend && npm run start`: run compiled backend from `dist/server.js`.
 - `cd backend && npm test`: run the Vitest suite (`src/**/*.test.ts`, needs Node 22+). Tests set their own environment in `backend/vitest.config.mts`, never read a `.env`, and never reach a real Google account or database.
+- `cd backend && TEST_DATABASE_URL=mysql://... npm run test:integration`: run the HTTP integration tests (`src/**/*.int.test.ts`) against a throwaway MySQL with the migrations applied (`prisma migrate deploy`). The database name must end in `_test` or the run refuses to start, and every table is truncated before each test. Google is faked.
 - `cd backend && npm run prisma:migrate`: run Prisma dev migration.
 - `cd backend && npm run prisma:generate`: regenerate Prisma client.
 - `cd backend && npm run seed:google-config`: store encrypted Google OAuth config.
