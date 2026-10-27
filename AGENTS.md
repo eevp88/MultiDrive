@@ -52,6 +52,7 @@ Commands:
 - `cd backend && npm run dev`: start development server.
 - `cd backend && npm run build`: typecheck/build backend.
 - `cd backend && npm run start`: run compiled backend from `dist/server.js`.
+- `cd backend && npm test`: run the Vitest suite (`src/**/*.test.ts`, needs Node 22+). Tests set their own environment in `backend/vitest.config.mts`, never read a `.env`, and never reach a real Google account or database.
 - `cd backend && npm run prisma:migrate`: run Prisma dev migration.
 - `cd backend && npm run prisma:generate`: regenerate Prisma client.
 - `cd backend && npm run seed:google-config`: store encrypted Google OAuth config.
@@ -282,6 +283,7 @@ Docker notes:
 
 Before finishing backend changes:
 - `cd backend && npm run build`
+- `cd backend && npm test`
 
 Before finishing frontend changes:
 - `cd frontend && npm run build`
