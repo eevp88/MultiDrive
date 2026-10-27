@@ -264,6 +264,14 @@ Uploads:
 - OneDrive accounts take part in the same routing. Files up to 4 MiB use a simple upload; larger ones use a Graph upload session with 10 MiB chunks. Both `POST /uploads` and the resumable endpoints (`/uploads/resumable/init`, `/status/:id`, `/chunk/:id`, which the web UI uses) support OneDrive. A same-name upload is renamed by OneDrive instead of replacing the file. Files live in the OneDrive folder `MultiDrive`; virtual folders stay database-only.
 - `POST /files/sync-google` treats Google Drive folder `MultiDrive` as source of truth for physical files and folders: it walks the whole subfolder tree, creates or updates the matching `folders` rows (name and parent, restoring a soft-deleted one that exists again), soft-deletes mirrored folders that no longer exist in Drive (folders without `providerFolderId` are left alone), creates missing MySQL file rows, updates changed metadata (including the folder a file sits in), and marks missing Drive files as deleted. A file it marks as deleted because it disappeared gets `deletedBySync: true` and comes back when it reappears; a file trashed in the app (`deletedBySync: false`) is never touched, so it stays in the trash until it is restored there (same for OneDrive). It also syncs OneDrive accounts (same rules, folder `MultiDrive`).
 
+## End to end tests
+
+- `e2e/`: Playwright suite with its own `package.json` and an isolated docker stack (`e2e/docker-compose.yml`, project `multidrive-e2e`, API on 14000, web on 15173, MySQL in memory, fixed throwaway secrets, no Google or OneDrive).
+- `cd e2e && npm run e2e`: recreate the stack and run the tests (needs Docker and `npx playwright install chromium` once). `npm run stack:up`, `npm run stack:down` and `npm test` run the steps separately.
+- Register is rate limited to 10 per hour per backend process and a run uses 3: recreate the stack (`npm run e2e`) instead of running `npm test` more than three times on one stack.
+- Tests read the English UI (the config fixes the browser locale to `en-US`), reuse the user registered by `tests/auth.setup.ts`, and must not need a Drive account.
+- CI (`.github/workflows/ci.yml`) has four jobs: backend (build and unit tests), backend integration (MySQL service container), frontend (build and tests) and e2e.
+
 ## Docker
 
 Commands:
