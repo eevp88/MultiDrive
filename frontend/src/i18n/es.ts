@@ -512,6 +512,8 @@ export const es: Messages = {
 
   'upload.filesCount': '{count} archivos',
   'upload.progressCount': '{done} de {total} archivos',
+  'upload.togglePanel': 'Contraer o expandir el panel de subidas',
+  'upload.closePanel': 'Cerrar el panel de subidas',
 
   'recent.title': 'Recientes',
   'recent.description': 'Últimos archivos abiertos y modificados.',

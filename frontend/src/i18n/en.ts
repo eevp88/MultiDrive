@@ -510,6 +510,8 @@ export const en = {
 
   'upload.filesCount': '{count} files',
   'upload.progressCount': '{done} of {total} files',
+  'upload.togglePanel': 'Collapse or expand the upload panel',
+  'upload.closePanel': 'Close the upload panel',
 
   'recent.title': 'Recent',
   'recent.description': 'Latest opened and modified files.',
