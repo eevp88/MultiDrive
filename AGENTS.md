@@ -270,7 +270,15 @@ Uploads:
 - `cd e2e && npm run e2e`: recreate the stack and run the tests (needs Docker and `npx playwright install chromium` once). `npm run stack:up`, `npm run stack:down` and `npm test` run the steps separately.
 - Register is rate limited to 10 per hour per backend process and a run uses 3: recreate the stack (`npm run e2e`) instead of running `npm test` more than three times on one stack.
 - Tests read the English UI (the config fixes the browser locale to `en-US`), reuse the user registered by `tests/auth.setup.ts`, and must not need a Drive account.
-- CI (`.github/workflows/ci.yml`) has four jobs: backend (build and unit tests), backend integration (MySQL service container), frontend (build and tests) and e2e.
+- CI (`.github/workflows/ci.yml`) has five jobs: backend (build and unit tests), cli (Go), backend integration (MySQL service container), frontend (build and tests) and e2e.
+
+## Go CLI
+
+- `cli/`: `multidrive-upload`, a Go (standard library only) command line that uploads files through `POST /api/v1/uploads` with an API key. Its own module (`github.com/eevp88/MultiDrive/cli`, Go 1.24); the backend is not touched by it. Layout: `internal/plan` (collect files, batches of 25), `internal/client` (streaming multipart client), `internal/app` (flags, progress, exit codes), `cmd/multidrive-upload` (main).
+- `cd cli && go vet ./... && go test -race ./...`: unit tests, no network.
+- `cd e2e && npm run stack:up` then `cd cli && go test -tags e2e ./e2e`: the real binary against the isolated docker stack (no Drive account, so no file is stored; see `cli/README.md`). The check uses 1 of the 10 registrations per hour the stack allows.
+- The key is read from `MULTIDRIVE_API_KEY`, never from an argument, and never printed. Folders are not recreated: an API key cannot create them.
+- CI has a `cli` job (`gofmt`, `go vet`, `go test -race`) and the `e2e` job also runs the CLI check.
 
 ## Docker
 

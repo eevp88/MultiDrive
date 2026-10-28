@@ -615,7 +615,8 @@ Tests need Node.js 22 or newer (Vitest 5). None of them touch a real Google Driv
 - The integration suite refuses to start when the database name does not end in `_test`, and it truncates every table before each test. Never point it at development data. Google is faked at the module boundary.
 - `npm run e2e` recreates an isolated stack (`e2e/docker-compose.yml`: its own project name, API on port 14000, web on 15173, MySQL in memory) and runs the browser tests against it. It does not touch the development stack. Registration is rate limited to 10 per hour per backend process and each run uses 3, so use `npm run e2e` instead of repeating `npm test` more than three times on the same stack.
 - Flows that need Drive (upload, download, sync) are covered by the integration tests with a fake Drive, not end to end.
-- GitHub Actions runs all four levels on every pull request (`.github/workflows/ci.yml`).
+- `cli/` holds `multidrive-upload`, a Go command line uploader that uses an API key (see `cli/README.md`); its tests run with `cd cli && go test -race ./...`.
+- GitHub Actions runs all four levels, plus the Go CLI, on every pull request (`.github/workflows/ci.yml`).
 
 ## 8. Manual Test Flow
 
