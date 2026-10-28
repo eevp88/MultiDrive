@@ -1,0 +1,30 @@
+# go-upload-cli
+
+Objective: experiment with Go by building a command line uploader that talks to the existing API key endpoint, without changing the backend.
+Branch: one branch per task from `main` | Delivery strategy: `stacked-to-main` (each task is its own PR, merged in order) | Test runner: `go test` (standard library only)
+
+## Specs
+
+Quotes are the user's exact words. Items marked (assumption) come from the assistant's proposal and can be changed.
+
+- S1. "me gustaria experimentar con golang": the goal is to try Go on this project.
+- S2. "explora las 3 alternativas para encontrar la mejor opcion", then "dale la" and "C": option C, a separate tool written in Go that lives next to the TypeScript backend. The backend is not rewritten and no module is ported.
+- S3. "en la carpeta cli": the tool lives in the `cli/` folder of this repository.
+- S4. (assumption) The CLI uploads through `POST /api/v1/uploads` with an API key (scope `files:upload`). Standard library only, no dependencies. The key comes from the `MULTIDRIVE_API_KEY` environment variable, never from an argument. No automatic retry, because the server does not deduplicate and a repeated upload would create a copy. Exit code 1 when any file failed.
+- S5. (assumption) Server contract the client must respect: at most 25 files per request; `filesMeta` is sent before the file parts and declares each `fieldName`, `fileName`, `mimeType` and an exact `sizeBytes` (whole number, at most 15 digits, a mismatch is `UPLOAD_SIZE_MISMATCH`); files are streamed from disk so memory stays constant; a per-file size limit (`MAX_UPLOAD_BYTES`, 5 GiB in the docker config) exposed as a flag.
+- S6. (assumption) The folder tree is not recreated: an API key cannot create folders (`POST /folders` needs a login token). Files go to the root or to an existing folder passed with `--folder-id`. A scope for it would change the backend and is out of scope.
+- S7. (assumption) No backend change. Tests never touch a real Drive or a real account: unit tests use a fake HTTP server, and the end to end check uses the isolated docker stack in `e2e/`. Project rules that apply: update `AGENTS.md` and the README, never read `.env` files, tests must not write files outside temp dirs.
+
+## Tasks
+
+- [x] T1 | S3, S4, S5 | inline | `cli/` Go module and `internal/plan`: collect files from paths (recursive, symlinks and non-regular files skipped, over-limit files skipped with a reason, deterministic order, MIME by extension) and split them into batches of 25, with tests | commit: see git log (branch feat/go-upload-cli-walk-and-batch; 12 tests pass 3 runs in a row, `go vet` and `gofmt` clean, 4 deliberate breakages detected)
+- [ ] T2 | S4, S5 | inline | Streaming multipart client: `filesMeta` first, exact sizes, constant memory, response mapping (`{ files, failed }`, 400 with `failed`), key never logged, tested against an `httptest` server | commit: pending
+- [ ] T3 | S4, S6 | inline | CLI wiring: flags (`--url`, `--folder-id`, `--concurrency`, `--dry-run`, `--max-bytes`), `MULTIDRIVE_API_KEY`, per-file progress, summary and exit codes, with tests | commit: pending
+- [ ] T4 | S7 | inline | CI job for Go (`vet` and `test`), `cli/README.md`, `AGENTS.md`, and a check against the docker stack of `e2e/` (create an API key, run the CLI, verify the upload) | commit: pending
+
+## Log
+
+- L1 (2026-10-28): "me gustaria experimentar con golang"
+- L2 (2026-10-28): the assistant asked the scope (rewrite the backend, port one module, or a new Go service alongside) and the user answered "explora las 3 alternativas para encontrar la mejor opcion". Findings: about 4k lines of TypeScript, 17 Prisma models and 20 migrations; tokens are encrypted with AES-256-GCM (`utils/crypto.ts`) and passwords hashed with argon2, so any Go code sharing the database must match those formats byte for byte; Prisma has no Go equivalent; the 98 integration tests are in-process Supertest and do not port, only the 8 e2e tests speak plain HTTP; the public API with an API key is one route, `POST /api/v1/uploads` with scope `files:upload`. Recommendation: option C, a CLI uploader.
+- L3 (2026-10-28): the user chose with "dale la" and "C", and placed it with "en la carpeta cli". Go 1.27.1 is installed (mise).
+- L4 (2026-10-28): T1 design: `cli/` is the module `github.com/eevp88/MultiDrive/cli` (Go 1.24 in go.mod, standard library only). `internal/plan` has `Collect(paths, maxBytes)` and `Batches(entries, size)`. Symlinks and special files are skipped and reported, so a loop or a link to an outside file is never followed; a missing path is an error, not a skip; the effective size limit is the smaller of `--max-bytes` and 999999999999999, the largest size the server accepts in `sizeBytes`. Empty files are skipped with a reason: the zero byte fix (PR 35) covers only the resumable endpoints, and `POST /uploads` answers `UPLOAD_SIZE_REQUIRED` for a size of 0 (`upload.routes.ts`, the check on `meta.sizeBytes`); an earlier draft of this log said the opposite and was wrong. Batches never exceed 25 files even if asked to.
